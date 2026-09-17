@@ -19,7 +19,7 @@ import { WORK_AREA_COLOR_IDS, timezoneForWorkArea } from "../utils/workAreas.js"
  * (see syncAssignmentEvents). Once every payout is in, exactly how the
  * invite is split depends on whether everyone's being paid the same:
  *   - same amount for everyone -> ONE shared event, whole team invited,
- *     the pay line shows that one amount ("$30.00 each").
+ *     the pay line shows that one amount ("Worker payout: $30.00").
  *   - different amounts -> ONE PERSONAL event per worker (only they're
  *     invited to their own), the pay line shows just their own figure.
  *     Google Calendar has no way to show different text to different
@@ -111,10 +111,17 @@ function descriptionBullets(text) {
  * exploded into its own numbered list (1. A, 2. B, 3. C, ...) instead of
  * one bullet with a dozen-plus items crammed onto a single semicolon-joined
  * line. Much easier to actually read on a job with a long parts list.
+ *
+ * "Charges total: ..." is dropped entirely rather than turned into a
+ * bullet - the calendar invite is meant to show workers only their own
+ * payout (see buildDescription's Pay section below), not the job's total
+ * charge to the customer. This only affects the calendar - job.description
+ * itself is untouched, so the Jobs tab still shows the full scraped detail.
  */
 function jobDetailLines(description) {
   const lines = [];
   for (const item of descriptionBullets(description)) {
+    if (/^Charges total:/i.test(item)) continue;
     const productsMatch = item.match(/^Products:\s*(.+)$/i);
     if (productsMatch) {
       const products = productsMatch[1]
@@ -166,10 +173,11 @@ function pushRawSection(lines, title, rawLines) {
  * The Pay section deliberately shows ONLY a worker-payout figure - never
  * the IKEA payout, GST, admin cut or profit (those stay admin-only, inside
  * the app's own Jobs tab). `payoutView` controls exactly what that figure
- * is: { mode: "shared", amount } shows one "$X each" line (every invited
- * worker is being paid the same), { mode: "single", amount } shows just
- * "$X" (this event is personal to one worker). No payoutView at all omits
- * the Pay section entirely.
+ * is: { mode: "shared", amount } and { mode: "single", amount } both show
+ * a plain "Worker payout: $X" line (no "each" suffix on the shared one -
+ * every worker on that invite is already being paid that exact amount, so
+ * it doesn't need qualifying). No payoutView at all omits the Pay section
+ * entirely.
  */
 function buildDescription(job, team, payoutView) {
   const lines = [];
@@ -183,14 +191,14 @@ function buildDescription(job, team, payoutView) {
   pushSection(lines, "Customer", customerItems);
 
   const payItems = [];
-  if (payoutView?.mode === "shared") {
-    payItems.push(`Worker payout: $${Number(payoutView.amount).toFixed(2)} each`);
-  } else if (payoutView?.mode === "single") {
+  if (payoutView?.mode === "shared" || payoutView?.mode === "single") {
     payItems.push(`Worker payout: $${Number(payoutView.amount).toFixed(2)}`);
   }
   pushSection(lines, "Pay for this job", payItems);
 
-  pushSection(lines, null, [`Assigned team: ${team.map((w) => w.name).join(", ")}`, `Source: ${job.sourceUrl}`]);
+  // No "Source: <link>" line anymore - that Beehiive URL isn't something a
+  // worker needs to see on their calendar invite.
+  pushSection(lines, null, [`Assigned team: ${team.map((w) => w.name).join(", ")}`]);
 
   return lines.join("\n");
 }

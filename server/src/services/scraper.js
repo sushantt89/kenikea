@@ -498,10 +498,16 @@ function draftFromBeehiiveHtml(html, url) {
   const attendMatch = html.match(/<p>\s*(Attend,\s*set up and commence[^<]*)<\/p>/i);
   const categoryMatch = html.match(/class="markdown">\s*<h2>([^<]+)<\/h2>/i);
   const category = categoryMatch ? categoryMatch[1].trim() : "";
-  const title = attendMatch
-    ? attendMatch[1].trim()
-    : category
-    ? `${category} - Job ${jobId}`.trim()
+  // Always tag the title with "(Job <id>)" when a job id was found, so it's
+  // visible at a glance in the Jobs tab list without opening the job -
+  // except the last, no-title-found fallback, which is already just the
+  // job id on its own and would otherwise end up looking like
+  // "Job 695380 (Job 695380)".
+  const baseTitle = attendMatch ? attendMatch[1].trim() : category || "";
+  const title = baseTitle
+    ? jobId
+      ? `${baseTitle} (Job ${jobId})`
+      : baseTitle
     : `Job ${jobId || "Unknown"}`;
 
   const phoneMatch = html.match(/href="tel:([^"]+)"/i);
