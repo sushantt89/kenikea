@@ -1,0 +1,10 @@
+node_modules/
+.env
+dist/
+.DS_Store
+*.log
+
+# Saved Beehiive login session (server/src/services/beehiiveSession.js) -
+# disposable, server-local session cookies, not application data. Deleting
+# it just means the next Beehiive login link is needed again.
+server/.beehiive-session.json

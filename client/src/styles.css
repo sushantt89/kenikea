@@ -1,0 +1,1073 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f6fb;
+  --bg-accent: #eef1fb;
+  --card-bg: #ffffff;
+  --card-gradient-from: #ffffff;
+  --card-gradient-to: #fbfbff;
+  --input-bg: #ffffff;
+  --navbar-bg: rgba(255, 255, 255, 0.92);
+  --border: #e4e7f0;
+  --text: #1c2130;
+  --muted: #667085;
+  --primary: #3f5efb;
+  --primary-dark: #2f47d1;
+  --primary-light: #eef0ff;
+  --danger: #e0455a;
+  --danger-light: #fdecee;
+  --green: #1fa971;
+  --green-light: #e8f8f1;
+  --gray: #98a1b3;
+  --blue: #3f5efb;
+  --amber: #d59a1f;
+  --amber-light: #fff6e0;
+  /* Semantic text colors for tinted banners/lines (pay-line, profit,
+     stat tiles) - kept as their own variables (rather than reusing
+     --green/--danger directly) so dark mode can brighten them for
+     legibility against a dark tinted background without touching the
+     saturated brand colors used elsewhere (buttons, pills). */
+  --success-text: #146c47;
+  --success-text-strong: #0e5c3a;
+  --danger-text: #9c2b3a;
+  --warning-text: #8a6d00;
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px rgba(20, 24, 40, 0.06);
+  --shadow: 0 4px 16px rgba(20, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(20, 24, 40, 0.12);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Dark theme - toggled from the Settings page (see ThemeContext.jsx), which
+   sets data-theme="dark"/"light" on <html> and persists the choice in
+   localStorage. Every color elsewhere in this file is a var() reference
+   into this palette (or the light one above) rather than a hardcoded hex,
+   specifically so this one block is enough to re-theme the whole app. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #14161f;
+  --bg-accent: #1b1e2b;
+  --card-bg: #1c1f2c;
+  --card-gradient-from: #1f2333;
+  --card-gradient-to: #1a1d29;
+  --input-bg: #232735;
+  --navbar-bg: rgba(20, 22, 33, 0.92);
+  --border: #2c3040;
+  --text: #e7e9f2;
+  --muted: #9aa1b8;
+  --primary: #6c8cff;
+  --primary-dark: #4f6cf0;
+  --primary-light: #232a4d;
+  --danger: #ef5b71;
+  --danger-light: #3a1f26;
+  --green: #34c98a;
+  --green-light: #16302a;
+  --gray: #7d879c;
+  --blue: #6c8cff;
+  --amber: #e3b13a;
+  --amber-light: #3a2f14;
+  --success-text: #6fe3ae;
+  --success-text-strong: #9df5cb;
+  --danger-text: #ff9fae;
+  --warning-text: #f0c86a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: linear-gradient(180deg, var(--bg-accent) 0%, var(--bg) 240px, var(--bg) 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Navbar ---------- */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 32px;
+  background: var(--navbar-bg);
+  backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.navbar-brand {
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  background: linear-gradient(120deg, var(--primary), #7c5cff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 6px;
+}
+
+.navbar-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 8px 14px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.navbar-links a:hover {
+  background: var(--bg-accent);
+  color: var(--text);
+}
+
+.navbar-links a.active {
+  color: #fff;
+  background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+}
+
+.navbar-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 38px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  cursor: pointer;
+}
+
+.navbar-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin: 0 auto;
+  background: var(--text);
+  border-radius: 2px;
+}
+
+/* ---------- Layout ---------- */
+
+.app-content {
+  flex: 1;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+/* Used for the bare (no navbar) layout around /login, so its own
+   min-height: 100vh centering isn't fighting the normal page padding and
+   max-width that every other route gets. */
+.app-content-bare {
+  max-width: none;
+  padding: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+h1 {
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.scrape-card {
+  background: linear-gradient(180deg, var(--card-gradient-from) 0%, var(--card-gradient-to) 100%);
+}
+
+/* ---------- Forms ---------- */
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.form-row label,
+.worker-form > label,
+.draft-card > label,
+.scrape-form > label,
+.login-card form > label,
+.settings-form > label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+input,
+select,
+textarea {
+  font-size: 0.95rem;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  color: var(--text);
+  background: var(--input-bg);
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(63, 94, 251, 0.15);
+}
+
+.checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.checkbox-label input {
+  width: auto;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pay-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.pay-preview strong {
+  color: var(--green);
+  font-size: 1rem;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--gray);
+  color: white;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(120deg, var(--primary), var(--primary-dark));
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(120deg, var(--primary-dark), var(--primary-dark));
+}
+
+.btn-secondary {
+  background: var(--bg-accent);
+  color: var(--text);
+}
+
+.btn-danger {
+  background: var(--danger);
+}
+
+.btn-small {
+  padding: 7px 12px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.btn-tiny {
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  background: var(--primary);
+  border-radius: 7px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* ---------- Banners ---------- */
+
+.form-error {
+  background: var(--danger-light);
+  color: var(--danger);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.banner {
+  padding: 11px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.banner-error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.banner-warning {
+  background: var(--amber-light);
+  color: var(--warning-text);
+}
+
+.banner-success {
+  background: var(--green-light);
+  color: var(--success-text);
+}
+
+.muted {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.empty-state {
+  color: var(--muted);
+  font-style: italic;
+  padding: 18px 4px;
+}
+
+/* ---------- Tables ---------- */
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: -4px -4px 0;
+  padding: 4px;
+}
+
+table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.worker-table th,
+.worker-table td,
+.ranking-table th,
+.ranking-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.worker-table thead th,
+.ranking-table thead th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.worker-table tbody tr:hover,
+.ranking-table tbody tr:hover {
+  background: var(--bg-accent);
+}
+
+/* ---------- Pills ---------- */
+
+.pill {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.01em;
+}
+
+.pill-green {
+  background: var(--green);
+}
+.pill-gray {
+  background: var(--gray);
+}
+.pill-blue {
+  background: var(--blue);
+}
+.pill-priority-low {
+  background: var(--gray);
+}
+.pill-priority-medium {
+  background: var(--amber);
+}
+.pill-priority-high {
+  background: var(--danger);
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Job cards ---------- */
+
+.job-card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.job-card:hover {
+  box-shadow: var(--shadow);
+}
+
+.job-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.job-card-header h3 {
+  font-size: 1.05rem;
+}
+
+.job-description {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin: 10px 0;
+  line-height: 1.5;
+}
+
+.job-description-line {
+  margin: 0 0 6px;
+}
+
+.job-description-products {
+  margin: 0 0 6px;
+}
+
+.job-description-label {
+  font-weight: 600;
+}
+
+.job-description-products ol {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+
+.job-description-products li {
+  margin-bottom: 2px;
+}
+
+.pending-note {
+  color: var(--warning-text);
+}
+
+.assigned-line {
+  font-size: 0.9rem;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.pay-block {
+  margin: 8px 0;
+}
+
+.pay-line {
+  font-size: 0.85rem;
+  margin: 0 0 6px;
+  padding: 8px 12px;
+  background: var(--green-light);
+  border-radius: var(--radius-sm);
+  display: block;
+  color: var(--success-text);
+}
+
+.pay-amount {
+  color: var(--success-text-strong);
+}
+
+.profit-line.profit-positive {
+  background: var(--green-light);
+  color: var(--success-text-strong);
+}
+
+.profit-line.profit-negative {
+  background: var(--danger-light);
+  color: var(--danger-text);
+}
+
+/* ---------- Multi-worker assignment (JobCard) ---------- */
+
+.assigned-team {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.assigned-worker-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.assigned-worker-name {
+  flex: 1;
+  min-width: 140px;
+}
+
+.payout-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.payout-input input {
+  width: 90px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+}
+
+/* ---------- Work area tag (JobCard header, WorkerTable) ---------- */
+
+.area-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+}
+
+.area-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.job-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+
+.ranking {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.top-candidate {
+  background: var(--primary-light);
+  font-weight: 700;
+}
+
+/* Normalized 1-10 score cells in the candidate ranking table - see
+   client/src/utils/scoreScale.js for why the raw engine scores (very
+   different ranges per factor) are shown this way instead. */
+.score-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.score-bar-track {
+  width: 48px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-accent);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.score-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+.score-sub {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.72rem;
+}
+
+.job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---------- Filter bar (Jobs page) ---------- */
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.filter-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  min-width: 160px;
+}
+
+.filter-bar select {
+  min-width: 160px;
+}
+
+.filter-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* ---------- Chart (Jobs page overview) ---------- */
+
+.chart-card {
+  background: linear-gradient(180deg, var(--card-gradient-from) 0%, var(--card-gradient-to) 100%);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 28px;
+}
+
+/* ---------- Stat tiles (Jobs page overview - profit KPIs) ---------- */
+
+.stat-tile-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.stat-tile-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stat-tile-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.stat-tile-value.stat-tile-positive {
+  color: var(--success-text-strong);
+}
+
+.stat-tile-value.stat-tile-negative {
+  color: var(--danger-text);
+}
+
+.chart-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 72px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.chart-row-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-row-track {
+  background: var(--bg-accent);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.chart-row-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.chart-row-value {
+  text-align: right;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Responsive / mobile ---------- */
+
+@media (max-width: 860px) {
+  .chart-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 720px) {
+  .navbar {
+    padding: 12px 18px;
+    flex-wrap: wrap;
+  }
+
+  .navbar-toggle {
+    display: flex;
+  }
+
+  .navbar-links {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .navbar-links.open {
+    display: flex;
+  }
+
+  .navbar-links a {
+    padding: 10px 14px;
+  }
+
+  .app-content {
+    padding: 20px 16px 48px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: var(--radius-sm);
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+  }
+
+  .job-actions {
+    flex-direction: column;
+  }
+
+  .job-actions .btn {
+    width: 100%;
+  }
+
+  .job-card-header {
+    flex-direction: column;
+  }
+
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-bar label,
+  .filter-bar select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .filter-bar-actions {
+    margin-left: 0;
+    justify-content: space-between;
+  }
+
+  .filter-bar-actions .btn {
+    width: 100%;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar-brand {
+    font-size: 1rem;
+  }
+
+  .chart-row {
+    grid-template-columns: 72px 1fr 60px;
+    font-size: 0.72rem;
+  }
+}
+
+/* ---------- Navbar user area (username, Settings link, Logout) ---------- */
+
+.navbar-user-name {
+  padding: 8px 14px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.navbar-logout {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 8px 14px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.navbar-logout:hover {
+  background: var(--bg-accent);
+  color: var(--text);
+}
+
+/* ---------- Login page ---------- */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.login-card h1 {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.login-subtitle {
+  display: block;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* ---------- Settings page ---------- */
+
+.settings-section {
+  margin-bottom: 4px;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 3px;
+  background: var(--bg-accent);
+}
+
+.theme-toggle button {
+  border: none;
+  background: none;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle button.active {
+  background: var(--card-bg);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-accent);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+}
+
+.user-row-info strong {
+  display: block;
+}
+
+.you-tag {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-left: 6px;
+}

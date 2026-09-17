@@ -1,0 +1,14 @@
+{
+  "name": "worker-assignment-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root orchestration for deployment - installs/builds the client and server as one unit (see README > Deploying it live). Local development still runs client and server separately (see README > Backend/Frontend setup); this file exists for hosting platforms like Render that expect one build/start command at the repo root.",
+  "scripts": {
+    "install:all": "npm --prefix client install && npm --prefix server install",
+    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install && npx --prefix server playwright install --with-deps chromium",
+    "start": "npm --prefix server start"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
