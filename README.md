@@ -890,3 +890,5 @@ using the same login you use locally (same MongoDB database = same user
 accounts). From there everything works exactly as described in the rest of
 this README - Settings still lets you add more logins for your team, from
 their own devices, at that same URL.
+#   k e n i k e a  
+ 
