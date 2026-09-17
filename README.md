@@ -808,23 +808,32 @@ will be pushed.
 
 ### 17.2 Create the Render Web Service
 
+This has to be a **Docker**-environment Web Service, not Render's plain
+Node one. The reason: Render's plain Node build runs as a non-root user,
+and installing Chromium's OS-level libraries (what `playwright install
+--with-deps` does) requires becoming root - trying it there fails at build
+time with `su: Authentication failure`. The `Dockerfile` at the repo root
+sidesteps this by starting from Playwright's own official image, which
+already has Chromium and everything it needs baked in, so no root
+escalation is ever required.
+
 1. Sign in at [render.com](https://render.com) and choose **New > Web
    Service**.
 2. Connect the GitHub repository you just pushed.
-3. Leave **Root Directory** blank (this project's root `package.json`
-   handles both `client/` and `server/` - see below).
-4. **Build Command:**
-   ```
-   npm run build
-   ```
-   (installs both `client` and `server` dependencies, builds the React app
-   into `client/dist`, and downloads the Chromium browser Playwright needs
-   for the Beehiive scraper - see `package.json` at the repo root.)
-5. **Start Command:**
-   ```
-   npm run start
-   ```
-6. **Instance type:** the Free tier works for trying this out. Two things
+3. Render should auto-detect the `Dockerfile` at the repo root and set
+   **Environment** to **Docker** on its own. If it instead defaults to
+   "Node" (or you already created the service that way and hit the
+   `su: Authentication failure` build error), open the service's
+   **Settings** and look for an environment/runtime switch to change it to
+   Docker; if Render doesn't offer that switch for an existing service,
+   it's simplest to delete this Web Service and create a new one, this
+   time confirming Docker is selected before the first deploy - you'll
+   just need to re-add the environment variables (17.3) on the new one.
+4. With Docker selected, **Build Command** and **Start Command** don't
+   apply - the `Dockerfile` defines both (it builds the client, installs
+   the server, and starts it with `node server/src/index.js`). Leave
+   those fields as Render's Docker default (usually blank/greyed out).
+5. **Instance type:** the Free tier works for trying this out. Two things
    to know about it (see 17.4 below) before relying on it day to day.
 
 ### 17.3 Environment variables
@@ -890,5 +899,6 @@ using the same login you use locally (same MongoDB database = same user
 accounts). From there everything works exactly as described in the rest of
 this README - Settings still lets you add more logins for your team, from
 their own devices, at that same URL.
-#   k e n i k e a  
+#   k e n i k e a 
+ 
  

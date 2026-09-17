@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+.git
+.env
+server/.env
+server/.beehiive-session.json
+*.log

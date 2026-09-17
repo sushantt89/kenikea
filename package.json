@@ -2,10 +2,10 @@
   "name": "worker-assignment-app",
   "private": true,
   "version": "1.0.0",
-  "description": "Root orchestration for deployment - installs/builds the client and server as one unit (see README > Deploying it live). Local development still runs client and server separately (see README > Backend/Frontend setup); this file exists for hosting platforms like Render that expect one build/start command at the repo root.",
+  "description": "Root orchestration for deployment - installs/builds the client and server as one unit (see README > Deploying it live). The Render deployment itself now uses the Dockerfile at the repo root instead of these scripts (see README > 17.2), since Render's plain Node build environment can't run `playwright install --with-deps` (it isn't allowed to become root). This file is kept for local/manual builds on a machine that already has the OS libraries Chromium needs (a normal desktop does) and for any future non-Docker host.",
   "scripts": {
     "install:all": "npm --prefix client install && npm --prefix server install",
-    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install && npx --prefix server playwright install --with-deps chromium",
+    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install && npx --prefix server playwright install chromium",
     "start": "npm --prefix server start"
   },
   "engines": {
