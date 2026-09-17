@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import WorkerForm from "../components/WorkerForm.jsx";
 import WorkerTable from "../components/WorkerTable.jsx";
 import { getWorkers, createWorker, updateWorker, deleteWorker } from "../api.js";
@@ -10,11 +10,19 @@ export default function Workers() {
   const [editing, setEditing] = useState(null); // worker being edited, or null for "add"
   const [showForm, setShowForm] = useState(false);
 
+  // Same fix as Jobs.jsx's loadAll() - see the comment there. Without
+  // hasLoadedOnce, editing/adding/deleting a worker while scrolled down
+  // the list would flip `loading` back to true, unmount the whole
+  // WorkerTable to show "Loading workers..." again, then remount it -
+  // which resets scroll to the top of the page every time.
+  const hasLoadedOnce = useRef(false);
+
   async function load() {
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
     setError("");
     try {
       setWorkers(await getWorkers());
+      hasLoadedOnce.current = true;
     } catch (err) {
       setError(err.message);
     } finally {

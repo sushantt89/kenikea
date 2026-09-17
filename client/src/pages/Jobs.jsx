@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import JobCard from "../components/JobCard.jsx";
 import JobsChart from "../components/JobsChart.jsx";
@@ -94,13 +94,27 @@ export default function Jobs() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [workAreaFilter, setWorkAreaFilter] = useState("all");
 
+  // `loading` gates the very first render (a full-page "Loading jobs..."
+  // placeholder while there's nothing to show yet). Every later reload -
+  // e.g. the one JobCard triggers via onChange right after you save a
+  // payout - reuses this same function, but must NOT flip `loading` back
+  // to true: doing that used to unmount the whole job list (scroll
+  // position included) just to briefly show that placeholder again before
+  // re-rendering the fresh data. hasLoadedOnce tracks that distinction
+  // with a ref (not state) since it doesn't need to trigger a render of
+  // its own - once true, later loadAll() calls just swap in new data
+  // without ever touching `loading`, so the list stays mounted and the
+  // page doesn't jump back to the top.
+  const hasLoadedOnce = useRef(false);
+
   async function loadAll() {
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
     setError("");
     try {
       const [jobsData, workersData] = await Promise.all([getJobs(), getWorkers()]);
       setJobs(jobsData);
       setWorkers(workersData);
+      hasLoadedOnce.current = true;
     } catch (err) {
       setError(err.message);
     } finally {
