@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import JobCard from "../components/JobCard.jsx";
 import JobsChart from "../components/JobsChart.jsx";
 import { getJobs, getWorkers } from "../api.js";
+import { useToast } from "../toast/ToastContext.jsx";
 import { WORK_AREAS, timezoneForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
 
@@ -84,6 +85,7 @@ function formatForExport(job) {
 }
 
 export default function Jobs() {
+  const { showToast } = useToast();
   const [jobs, setJobs] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -156,6 +158,7 @@ export default function Jobs() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Jobs");
     const stamp = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(workbook, `jobs-export-${stamp}.xlsx`);
+    showToast(`Exported ${rows.length} job${rows.length === 1 ? "" : "s"}`, "success");
   }
 
   return (

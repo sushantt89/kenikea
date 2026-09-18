@@ -38,7 +38,7 @@
  */
 
 import { guessWorkArea, timezoneForWorkArea, DEFAULT_TIMEZONE } from "../utils/workAreas.js";
-import { zonedTimeToUtc } from "../utils/timezone.js";
+import { zonedTimeToUtc, formatInZone } from "../utils/timezone.js";
 import { saveSessionCookies, loadSessionCookieHeader, clearSession } from "./beehiiveSession.js";
 
 const FETCH_TIMEOUT_MS = 15000;
@@ -484,6 +484,23 @@ export async function scrapeJob(url, authHeader) {
  * "83 mins (1.38 hrs) allocated" pattern already handled by
  * parseAllocatedMinutes() - both regexes are reused unchanged.
  */
+// Looks for a customer email within ~400 characters of `anchorIndex`
+// (the phone number's tel: link) rather than anywhere on the page - see
+// the long comment where this is called for why that scoping matters. A
+// clickable mailto: link is tried first, then a plain email-address
+// pattern in that same nearby text (after stripping tags) as a fallback
+// for templates that just print the address as plain text.
+function findNearbyEmail(html, anchorIndex) {
+  if (anchorIndex < 0) return "";
+  const windowStart = Math.max(0, anchorIndex - 400);
+  const windowEnd = Math.min(html.length, anchorIndex + 400);
+  const nearby = html.slice(windowStart, windowEnd);
+  const mailtoMatch = nearby.match(/href="mailto:([^"]+)"/i);
+  if (mailtoMatch) return mailtoMatch[1];
+  const plainMatch = stripHtml(nearby).match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  return plainMatch ? plainMatch[0] : "";
+}
+
 function draftFromBeehiiveHtml(html, url) {
   const text = stripHtml(html);
 
@@ -513,8 +530,20 @@ function draftFromBeehiiveHtml(html, url) {
   const phoneMatch = html.match(/href="tel:([^"]+)"/i);
   const phone = phoneMatch ? phoneMatch[1] : "";
 
-  const emailMatch = html.match(/href="mailto:([^"]+)"/i);
-  const email = emailMatch ? emailMatch[1] : "";
+  // The customer's email, when the page has one. Deliberately searched
+  // only in a window AROUND the phone's tel: link (the same "Job site"
+  // block the name/phone come from) rather than the whole page - a
+  // whole-page mailto: search can just as easily match an unrelated
+  // address elsewhere (the logged-in account's own email in the nav, a
+  // generic support/service-centre contact further down the page - the
+  // exact same class of false-positive as guessWorkArea's whole-page NSW
+  // email bug noted above). Some job templates also show the customer's
+  // email as plain text rather than a clickable mailto: link, which a
+  // mailto:-only search would never find at all regardless of scope, so
+  // this tries a plain email pattern too once it's confined to that
+  // nearby text. This is what was silently producing "" for `email` on
+  // jobs whose customer genuinely does have one listed on the page.
+  const email = findNearbyEmail(html, phoneMatch ? html.indexOf(phoneMatch[0]) : -1);
 
   // Customer name sits as a bare <b>Name</b> immediately above the tel:
   // link in the "Job site" block. The old `fa-map-marker ... <br` pattern
@@ -536,9 +565,15 @@ function draftFromBeehiiveHtml(html, url) {
   const addressBlockMatch =
     html.match(/<address>\s*<a[^>]*>([\s\S]*?)<\/a>\s*<\/address>/i) ||
     html.match(/<address>([\s\S]*?)<\/address>/i);
-  const address = addressBlockMatch
+  const addressFromTag = addressBlockMatch
     ? stripHtml(addressBlockMatch[1].replace(/<br\s*\/?>/gi, ", ")).trim()
     : "";
+  // Layered fallbacks for when the <address> tag itself isn't present (a
+  // different Beehiive template, or the block missing entirely): try a
+  // Google Maps link next, then a generic Australian street-address pattern
+  // anywhere on the page, before finally giving up and leaving it blank for
+  // the user to fill in by hand (see the extraction.notes flag below).
+  const address = addressFromTag || guessAddressFromMapsLink(html) || guessAddressFromText(text);
 
   const orderNumberMatch = html.match(/<b>OrderNumber<\/b>\s*([\s\S]*?)<\/p>/i);
   const orderNumber = orderNumberMatch ? stripHtml(orderNumberMatch[1]).trim() : "";
@@ -584,7 +619,10 @@ function draftFromBeehiiveHtml(html, url) {
   if (customerName) descriptionParts.push(`Customer: ${customerName}${phone ? ` (${phone})` : ""}`);
   if (chargesTotal != null) descriptionParts.push(`Charges total: ~$${chargesTotal.toFixed(2)}`);
   if (isSecureIt) descriptionParts.push("May require IKEA Secure It! - please verify on site");
-  if (commitTime) descriptionParts.push(`Must commit to attend: ${commitTime.toLocaleString()}`);
+  // Shown in the job's own work-area timezone, same as everything else on
+  // this job (scheduledStart, etc.) - NOT the scraping machine's local
+  // time, which is what commitTime.toLocaleString() would have used.
+  if (commitTime) descriptionParts.push(`Must commit to attend: ${formatInZone(commitTime, timezoneForWorkArea(workArea))}`);
 
   const notes = [];
   if (!scheduledStart) notes.push("couldn't parse an exact scheduled date/time, please set it manually");
@@ -609,6 +647,42 @@ function draftFromBeehiiveHtml(html, url) {
   };
 }
 
+// A generic Australian street-address pattern used as a LAST-RESORT
+// fallback across every extraction path below, for whenever a source's own
+// more specific pattern doesn't find anything - e.g. Beehiive has shown
+// more than one template for its "Job site" block over time, so relying on
+// a single <address> tag match alone occasionally comes back empty even
+// though the address is sitting right there in the page as plain text.
+// Matches things like "28 Frederick Street, Maylands SA 5069" or
+// "12/4 Example Rd Maylands SA 5069" (comma optional, common street-type
+// abbreviations, unit/lot prefix optional).
+const AU_ADDRESS_PATTERN =
+  /\d{1,5}[A-Za-z]?(?:\/\d{1,5}[A-Za-z]?)?\s+[A-Za-z0-9'.\s]{2,40}?\s(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Court|Ct|Place|Pl|Lane|Ln|Way|Crescent|Cres|Parade|Pde|Boulevard|Blvd|Terrace|Tce|Highway|Hwy|Close|Cl|Circuit|Cct)\.?,?\s+[A-Za-z\s]{2,30}\s(?:NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\s+\d{4}/i;
+
+function guessAddressFromText(text) {
+  if (!text) return "";
+  const m = text.match(AU_ADDRESS_PATTERN);
+  return m ? m[0].replace(/\s{2,}/g, " ").trim() : "";
+}
+
+// Some "Job site" blocks link out to Google Maps instead of (or as well as)
+// rendering an <address> tag, e.g.
+// href="https://www.google.com/maps/search/?api=1&query=28+Frederick+St...".
+// When the <address> tag itself is missing, pull the address straight out
+// of that link's query/destination parameter rather than giving up.
+function guessAddressFromMapsLink(html) {
+  if (!html) return "";
+  const m = html.match(
+    /href="https?:\/\/(?:www\.)?google\.com\/maps\/[^"]*[?&](?:query|destination)=([^"&]+)/i
+  );
+  if (!m) return "";
+  try {
+    return decodeURIComponent(m[1].replace(/\+/g, " ")).trim();
+  } catch {
+    return "";
+  }
+}
+
 function parseCommitTime(html) {
   const m = html.match(/<time\s+datetime="([^"]+)"[^>]*>/i);
   if (!m) return null;
@@ -623,7 +697,15 @@ function draftFromHtml(html, url) {
   const combinedText = `${metaDescription} ${bodyText}`.slice(0, 20000);
 
   const difficulty = guessDifficulty(combinedText);
-  const location = guessLocation(combinedText);
+  let location = guessLocation(combinedText);
+  if (!location.value) {
+    // The "location:"/"based in"/"located in" label patterns above only
+    // catch a page that phrases it that way - fall back to a Google Maps
+    // link, then a generic Australian street-address pattern anywhere on
+    // the page, before leaving it blank for the user to fill in.
+    const fallback = guessAddressFromMapsLink(html) || guessAddressFromText(combinedText);
+    if (fallback) location = { value: fallback, confidence: "medium" };
+  }
   const priority = guessPriority(combinedText);
 
   const notes = [];
@@ -680,8 +762,9 @@ function draftFromJson(raw, url) {
 
   const title = pick("title", "job_title", "position", "name") || "Untitled job";
   const description = pick("description", "job_description", "summary", "details");
-  const location = pick("location", "job_location", "city", "address");
   const combinedText = `${title} ${description}`;
+  const location =
+    pick("location", "job_location", "city", "address") || guessAddressFromText(combinedText);
   const difficulty = guessDifficulty(combinedText);
   const priority = guessPriority(combinedText);
 
@@ -728,7 +811,10 @@ function draftFromBeehiiveJob(job, url) {
   const products = cleanProductList(job.products);
   const allocatedMinutes = parseAllocatedMinutes(allText);
 
-  const location = job.location?.address || "";
+  // job.location.address is the normal source, but fall back to scanning
+  // this job's own description text for a plain address pattern if that
+  // structured field is ever missing - see AU_ADDRESS_PATTERN above.
+  const location = job.location?.address || guessAddressFromText(allText) || "";
   const customer = job.customer || {};
   // Same ordering reason as draftFromBeehiiveHtml above: guess the work
   // area first so a fallback-parsed time (see below) is interpreted in the

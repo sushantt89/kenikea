@@ -45,10 +45,34 @@ const WorkerSchema = new Schema(
       trim: true,
       default: "",
     },
+    // LEGACY/unused - this used to be a plain on/off roster toggle that
+    // hard-excluded a worker from the assignment engine (see
+    // services/assignment.js). It's no longer shown anywhere in the UI
+    // (removed from WorkerForm.jsx) and no longer read by the assignment
+    // engine, which now checks the day-by-day fortnightly answers below
+    // instead (see services/fortnightAvailability.js) - kept in the schema
+    // only so existing documents/data aren't disturbed.
     availability: {
       type: Boolean,
       default: true,
     },
+    // Day-by-day answers from the team's fortnightly Google Form ("Bi-weekly
+    // Schedule Update"), synced in by services/availabilitySync.js - see
+    // that file for the sync itself. Each entry is one calendar date this
+    // worker has answered for, in their own free-text words (e.g.
+    // "8am-5pm" or "Not available"). Purely informational/for the admin to
+    // see at a glance - it does NOT feed the assignment engine, unlike the
+    // plain `availability` toggle above.
+    formAvailability: {
+      type: [
+        {
+          date: { type: Date, required: true },
+          text: { type: String, default: "" },
+        },
+      ],
+      default: [],
+    },
+    formAvailabilitySyncedAt: { type: Date, default: null },
     skillLevel: {
       type: Number,
       min: 1,

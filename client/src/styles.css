@@ -198,6 +198,13 @@ body {
   margin-bottom: 18px;
 }
 
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 h1 {
   font-size: 1.7rem;
   font-weight: 800;
@@ -417,8 +424,229 @@ textarea:focus {
   font-weight: 500;
 }
 
+/* ---------- Excluded candidates list (JobCard "Preview candidates") ---------- */
+.excluded-list {
+  margin-top: 10px;
+}
+
+.excluded-list-title {
+  margin: 0 0 6px;
+}
+
+.excluded-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.excluded-list-items li {
+  background: var(--danger-light);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.excluded-list-name {
+  font-weight: 700;
+  color: var(--danger-text);
+  flex-shrink: 0;
+}
+
+.excluded-list-reason {
+  color: var(--danger-text);
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+/* ---------- Edit-job modal (JobCard "Edit" button, reuses JobDraftForm) ---------- */
+.job-edit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 31, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 20px;
+  overflow-y: auto;
+  z-index: 60;
+}
+
+.job-edit-modal-panel {
+  width: 100%;
+  max-width: 640px;
+}
+
 .small {
   font-size: 0.8rem;
+}
+
+/* ---------- Fortnight availability popup (Workers table) ---------- */
+/* A hover-only title tooltip doesn't work on touch devices, so the
+   "N days synced" cell is a real button that opens a small tap-to-dismiss
+   popup instead - works the same on mobile and desktop. */
+.fortnight-cell-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.fortnight-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 31, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.fortnight-modal {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 20px 22px;
+  width: 100%;
+  max-width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.fortnight-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.fortnight-modal-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.fortnight-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.fortnight-modal-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fortnight-modal-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-accent);
+  font-size: 0.85rem;
+}
+
+.fortnight-modal-date {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fortnight-modal-text {
+  text-align: right;
+  color: var(--muted);
+}
+
+/* ---------- Toast notifications ---------- */
+/* A quick "task done" confirmation in the corner - see
+   client/src/toast/ToastContext.jsx. Mounted above the router (main.jsx)
+   so it survives a navigate() that happens right after showing one (e.g.
+   saving a job on Home.jsx immediately routes to /jobs). */
+.toast-stack {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  background: var(--card-bg);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-left: 4px solid var(--primary);
+  animation: toast-in 0.18s ease-out;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast-success {
+  border-left-color: var(--green);
+}
+.toast-success .toast-icon {
+  color: var(--green);
+}
+
+.toast-error {
+  border-left-color: var(--danger);
+}
+.toast-error .toast-icon {
+  color: var(--danger);
+}
+
+.toast-warning {
+  border-left-color: var(--amber);
+}
+.toast-warning .toast-icon {
+  color: var(--amber);
 }
 
 .empty-state {

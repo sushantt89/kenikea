@@ -90,6 +90,8 @@ Visit `http://localhost:5000/api/health` - you should see `{"ok":true}`.
 | `GOOGLE_CLIENT_SECRET`   | Google OAuth client secret (optional)                                    |
 | `GOOGLE_REFRESH_TOKEN`   | Obtained via `npm run get-google-token` (optional)                       |
 | `GOOGLE_CALENDAR_ID`     | Which calendar to create events on (default `primary`)                   |
+| `GOOGLE_AVAILABILITY_SHEET_ID` | Linked "Form Responses" Sheet ID for the availability sync (optional - see section 18) |
+| `GOOGLE_AVAILABILITY_SHEET_RANGE` | Which tab to read (default `Form Responses 1`)                    |
 
 ## 4. Frontend setup
 
@@ -206,11 +208,21 @@ payload format described below (run through the actual scraper code, with
 
 Add, edit, and delete workers. Fields: name, email, location, work area
 (Adelaide/Perth/Brisbane/NSW/Auckland - purely organisational, see section
-11 for how this differs from a *job's* work area), gender, phone,
-availability (toggle), skill level (1-5), and priority (Low/Medium/High).
-Latitude/longitude are filled in automatically from the location text (see
-**Geocoding** below) - you only need to touch them to override the
+11 for how this differs from a *job's* work area), gender, phone, skill
+level (1-5), and priority (Low/Medium/High). There is no plain on/off
+"Available" toggle anymore - see the Availability column below and section
+18. Latitude/longitude are filled in automatically from the location text
+(see **Geocoding** below) - you only need to touch them to override the
 automatic lookup.
+
+The **Availability** column shows how many days of the current fortnight
+each worker has answered on the team's Google Form - click it (tap on
+mobile) for a popup with each day's actual answer - click **Sync fortnight
+availability** above the table to pull in the latest responses. Unlike the
+old toggle, this DOES feed the assignment engine: a worker is excluded
+from a job if the job's scheduled time falls outside what they answered
+for that day. See section 18 for how the sync and the exclusion logic
+work.
 
 ### Home page (`/`)
 
@@ -683,9 +695,17 @@ The Jobs tab (`client/src/pages/Jobs.jsx`) adds:
 
 Implemented in `server/src/services/assignment.js`, applied in this order:
 
-1. **Availability filter (hard).** Workers with `availability = false` are
-   never candidates. Neither is a worker whose existing assigned job's
-   scheduled time window genuinely overlaps the new job's - a worker can't
+1. **Availability filter (hard).** A worker is never a candidate for a
+   time they told the fortnightly form they're not free for -
+   `server/src/services/fortnightAvailability.js` parses their day's
+   answer and compares it to the job's scheduled time (shown in the
+   excluded list as e.g. "Only free 8am-11am that day ..."). This fails
+   OPEN (does not exclude) whenever there's nothing to check against - no
+   scheduled time on the job, or no submitted answer for that day - so a
+   worker who simply hasn't answered yet isn't blocked from every job.
+   There is no separate plain on/off toggle anymore (see section 18).
+   Neither is a worker whose existing assigned job's scheduled time
+   window genuinely overlaps the new job's a candidate - a worker can't
    physically be in two places at once, so a real time conflict is a hard
    exclusion, not just a score penalty (shown in the excluded list as
    "Time conflict with ..."). This only fires when BOTH jobs have a known
@@ -850,6 +870,7 @@ shared automatically):
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Same as local, if you set them - otherwise leave blank and read the generated password from the Render logs on first boot (Logs tab) |
 | `TZ` | `Australia/Adelaide` (same as local) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REFRESH_TOKEN` / `GOOGLE_CALENDAR_ID` | Same values as local - a refresh token isn't tied to a particular server, so the one you already generated keeps working here |
+| `GOOGLE_AVAILABILITY_SHEET_ID` / `GOOGLE_AVAILABILITY_SHEET_RANGE` | Same values as local, if you've set up the availability sync (see section 18) |
 | `GEOCODE_CONTACT` | Same as local |
 | `LOCATIONIQ_API_KEY` | Same as local, if set |
 | `CLIENT_ORIGIN` | Not needed anymore in this single-service setup (frontend and API are now the same origin) - fine to leave unset |
@@ -899,6 +920,132 @@ using the same login you use locally (same MongoDB database = same user
 accounts). From there everything works exactly as described in the rest of
 this README - Settings still lets you add more logins for your team, from
 their own devices, at that same URL.
-#   k e n i k e a 
- 
- 
+
+## 18. Worker availability sync & fortnight rollout (Google Form)
+
+The team fills in a fortnightly Google Form ("Bi-weekly Schedule Update")
+with their availability - email, name, location, then a "Not available"
+checkbox plus a Start time / End time picker per day of the upcoming two
+weeks. The Workers page (`/workers`) has a **"Fortnight form rollout"**
+card at the top that can fully automate the whole cycle:
+
+- **Roll out to all workers** - creates the NEXT fortnight's Google Form
+  itself (right dates already filled in), then emails every worker with an
+  email address on file its link. No trip to Google Forms needed at all,
+  once this is set up (see 18.1).
+- **Sync fortnight availability** - pulls everyone's answers back into the
+  app, filling in an "Availability" column next to each worker on this
+  page (click it for the full day-by-day breakdown).
+- The card also shows when the form was last rolled out and how many days
+  until the next one is due (14 days later); rolling out again before then
+  asks for confirmation first.
+
+**This DOES feed the assignment engine.** There is no separate plain
+"Available" toggle anymore (removed from the Workers page entirely) - a
+worker is excluded from being assigned a job if the job's scheduled time
+falls outside what they answered for that specific day (or if they picked
+"Not available"), via `server/src/services/fortnightAvailability.js`. If
+a worker hasn't answered for that day yet, they're NOT excluded (there's
+nothing to check them against) - a human can still see the raw answer (or
+its absence) via the Availability column's popup.
+
+### 18.1 One-time setup
+
+1. In the same Google Cloud project you used for Calendar (see section
+   10), enable the **Google Forms API** and **Gmail API** (and **Google
+   Sheets API** too, only if you want the fallback described in 18.4).
+2. Re-run `npm run get-google-token` (see
+   `server/scripts/getGoogleRefreshToken.js`) - it now requests every scope
+   this app uses (Calendar, Gmail send, Forms create/read, and Sheets
+   read) together, so this replaces your existing `GOOGLE_REFRESH_TOKEN`
+   with one new token that can do all of it. Sign in with the same Google
+   account as before when it opens the browser tab.
+3. That's it - no spreadsheet ID or other config needed for the automatic
+   path. Click **Roll out to all workers** on the Workers page whenever
+   you're ready to send out the first one.
+4. Every worker's email in this app must exactly match the email they type
+   into the form (matching is case-insensitive, but otherwise exact). A
+   response from an email that doesn't match any worker here is skipped
+   and reported back in the sync result banner rather than silently
+   dropped or creating a new worker automatically.
+
+### 18.2 How it works under the hood
+
+**Rolling out:** `server/src/services/formManager.js` builds a brand new
+form via the Google Forms API - Email, Name, Location, then, per day of
+the fortnight: an unticked "Not available" checkbox, a Start-time
+question, and an End-time question, titled like "Monday (14/9/2026) -
+Start time" (the upcoming Monday through the following Sunday). Start and
+End use Google's own native time-of-day picker rather than a dropdown
+list or free text - a compact hour/minute + AM/PM control in a single
+row, with no restriction on which hours can be picked (a worker can pick
+any time, any hour of the day). Every worker therefore answers in exactly
+the same, unambiguous format. The form's own `responderUri` becomes the
+link that gets emailed out, and each question's Forms-API id is
+remembered (`FormRollout.questionMap`) so the next step knows exactly
+which question is which.
+
+**Syncing:** `server/src/services/availabilitySync.js` reads the checkbox
+and both time answers straight back from the Forms API for any form
+rolled out this way - no linked spreadsheet involved - and combines them
+into one string ("8:00 AM - 5:00 PM" / "Not available") in
+`Worker.formAvailability`, the same shape it's always stored in. A ticked
+checkbox always means "Not available" for that day regardless of
+whatever's in Start/End; if neither the checkbox nor a Start time was
+answered at all, that day is stored as no answer (fortnightAvailability.js
+then fails open on it, same as any day nobody's answered yet). It matches
+each response to a worker by email, and only keeps entries from the last
+~3 weeks per worker so old fortnights don't pile up indefinitely in the
+database.
+
+**Checking a job against it:** `fortnightAvailability.js` parses that
+stored string and compares it to a job's scheduled time (in the job's own
+work-area timezone). Because the auto-created form's time-picker answers
+always carry an explicit AM/PM, this is an exact comparison with no
+guesswork, and there's no cut-off hour - a job at any time of day is
+checked the same way. The ORIGINAL, hand-made form's free-text answers
+(read via the Sheets-based fallback below) still go through the same
+parser's heuristics for a bare, unmarked range like "8-5" - there's no
+5pm cut-off there either anymore, so a bare end hour is simply read as PM
+unless that would put it before the start time (e.g. "8-11" is now read
+as 8am-11pm, not 8am-11am) - see that file's own comments for the exact
+rule.
+
+If a step's Google scopes aren't set up yet, the relevant button just
+reports "not configured" rather than failing oddly - the rest of the app
+keeps working either way.
+
+### 18.3 The original, hand-made form
+
+If you'd rather keep using the original Google Form (the one this
+integration was originally built against) instead of letting the app
+create new ones, that still works: paste that form's link into the
+card's **Form link** field and click **Save link** - "Roll out" will only
+auto-create a new form when the Forms API scopes above are granted, so
+leaving those out (skip step 1's Forms API / step 2's forms scopes) keeps
+this manual path as the only option, and you'll duplicate the form by hand
+in Google Forms every fortnight as before.
+
+### 18.4 Reading the original form's answers (Google Sheets fallback)
+
+A form the app didn't create itself has no Forms-API question map to read
+by, so its answers are read from its linked Google Sheet instead:
+
+1. Enable the **Google Sheets API** and make sure
+   `https://www.googleapis.com/auth/spreadsheets.readonly` is in your
+   refresh token's scopes (already included if you ran step 2 in 18.1).
+2. Open the Google Form itself, go to its **Responses** tab, and click the
+   green Sheets icon (top right of that tab) - this opens the actual
+   spreadsheet Google Forms is writing responses into. Copy the long ID
+   out of its URL: `docs.google.com/spreadsheets/d/`**`THIS PART`**`/edit`.
+3. Set `GOOGLE_AVAILABILITY_SHEET_ID` in `server/.env` (and on Render, if
+   deployed - see section 17.3) to that ID. Leave
+   `GOOGLE_AVAILABILITY_SHEET_RANGE` on its default (`Form Responses 1`)
+   unless you've renamed that tab in the spreadsheet.
+
+The sync reads the header row and treats any column whose title ends in
+`(D/M/YYYY)` - e.g. "Monday (14/9/2026)" - as one specific calendar day,
+regardless of which day-of-week word comes before it or where it sits in
+the sheet. This is only ever used as a fallback: once you roll out a
+fortnight through the app itself, that and every later one read straight
+from the Forms API instead (see 18.2).

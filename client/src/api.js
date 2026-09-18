@@ -73,6 +73,11 @@ export const createWorker = (data) => request("/workers", { method: "POST", body
 export const updateWorker = (id, data) =>
   request(`/workers/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteWorker = (id) => request(`/workers/${id}`, { method: "DELETE" });
+export const syncWorkerAvailability = () => request("/workers/sync-availability", { method: "POST" });
+export const getRolloutStatus = () => request("/workers/rollout-status");
+export const updateRolloutFormUrl = (formUrl) =>
+  request("/workers/rollout-status", { method: "PUT", body: JSON.stringify({ formUrl }) });
+export const rollOutForm = () => request("/workers/roll-out", { method: "POST" });
 
 // Jobs
 export const getJobs = () => request("/jobs");

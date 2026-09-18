@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { WORK_AREA_SWATCH } from "../utils/workAreas.js";
+import { FortnightCell, FortnightModal } from "./FortnightAvailability.jsx";
 
 export default function WorkerTable({ workers, onEdit, onDelete }) {
+  const [openWorker, setOpenWorker] = useState(null);
+
   if (workers.length === 0) {
     return <p className="empty-state">No workers yet. Add your first one above.</p>;
   }
@@ -16,7 +20,7 @@ export default function WorkerTable({ workers, onEdit, onDelete }) {
           <th>Work area</th>
           <th>Gender</th>
           <th>Phone</th>
-          <th>Available</th>
+          <th>Availability</th>
           <th>Skill</th>
           <th>Priority</th>
           <th>Active jobs</th>
@@ -42,9 +46,7 @@ export default function WorkerTable({ workers, onEdit, onDelete }) {
             <td>{w.gender}</td>
             <td>{w.phone || "-"}</td>
             <td>
-              <span className={`pill ${w.availability ? "pill-green" : "pill-gray"}`}>
-                {w.availability ? "Yes" : "No"}
-              </span>
+              <FortnightCell worker={w} onOpen={setOpenWorker} />
             </td>
             <td>{"★".repeat(w.skillLevel)}{"☆".repeat(5 - w.skillLevel)}</td>
             <td>
@@ -63,6 +65,7 @@ export default function WorkerTable({ workers, onEdit, onDelete }) {
         ))}
       </tbody>
     </table>
+    <FortnightModal worker={openWorker} onClose={() => setOpenWorker(null)} />
     </div>
   );
 }

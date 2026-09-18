@@ -71,11 +71,29 @@ router.put("/:id", async (req, res, next) => {
     if (!existing) return res.status(404).json({ error: "Job not found" });
 
     const data = attachPay(await refreshCoordinatesOnUpdate(existing, sanitizeBody(req.body)));
+    // NOT populated yet on purpose - regenerateCalendarEvent() below needs
+    // assignedWorkers[].worker as plain ObjectIds (it does its own
+    // Worker.find({_id: {$in: ...}})), same reason every other route that
+    // calls it (assign-to, payout, ...) always does so before populating.
     const job = await Job.findByIdAndUpdate(req.params.id, data, {
       new: true,
       runValidators: true,
-    }).populate("assignedWorkers.worker", WORKER_POPULATE);
-    res.json(job);
+    });
+
+    // A job already assigned when it's edited (customer details, schedule,
+    // work area, ...) had its calendar invite built from whatever the job
+    // looked like at assignment time - without this, fixing a wrong/missing
+    // customer email (or any other detail) after assigning a worker would
+    // silently leave the existing invite stale, since nothing else here
+    // regenerates it. syncAssignmentEvents() itself is a no-op when nobody's
+    // assigned yet, so this is safe to call unconditionally, same as every
+    // other route that touches an assigned job (assign-to, payout, ...).
+    if (job.assignedWorkers.length > 0) {
+      await regenerateCalendarEvent(job);
+    }
+
+    const populated = await job.populate("assignedWorkers.worker", WORKER_POPULATE);
+    res.json(populated);
   } catch (err) {
     next(err);
   }

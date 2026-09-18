@@ -10,7 +10,6 @@ const EMPTY = {
   workArea: "",
   gender: "Prefer not to say",
   phone: "",
-  availability: true,
   skillLevel: 3,
   priority: "Medium",
 };
@@ -163,14 +162,6 @@ export default function WorkerForm({ initial, onSubmit, onCancel, submitLabel = 
             onChange={(e) => update("skillLevel", Number(e.target.value))}
             required
           />
-        </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={form.availability}
-            onChange={(e) => update("availability", e.target.checked)}
-          />
-          Available for work
         </label>
       </div>
 

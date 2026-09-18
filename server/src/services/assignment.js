@@ -1,11 +1,25 @@
 import { scoreLocation, locationsMatch } from "../utils/distance.js";
 import { timezoneForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
+import { checkFortnightAvailability } from "./fortnightAvailability.js";
 
 /**
  * The assignment engine, in the order the business rules were specified:
  *
- *   1. Availability     - a worker who isn't available is never a candidate.
+ *   1. Availability     - a worker is never a candidate for a time they've
+ *                         told the fortnightly form they're not free for -
+ *                         see checkFortnightAvailability() in
+ *                         fortnightAvailability.js, which parses their
+ *                         free-text day answer ("8-5", "Not available", ...)
+ *                         and compares it against this job's scheduled
+ *                         time. There is deliberately no plain on/off
+ *                         toggle anymore (the old Worker.availability
+ *                         checkbox is gone from the UI) - this is now
+ *                         entirely driven by what they actually submitted
+ *                         for that specific day. Like hasTimeConflict below,
+ *                         this fails OPEN (never excludes) whenever there's
+ *                         nothing to check against - no scheduled time on
+ *                         the job, or no submitted answer for that day.
  *                         Neither is a worker whose existing job's scheduled
  *                         time window genuinely overlaps this job's - a
  *                         worker can't physically be in two places at once,
@@ -159,8 +173,9 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
   const available = [];
 
   for (const worker of workers) {
-    if (!worker.availability) {
-      excluded.push({ workerId: worker._id, name: worker.name, reason: "Not available" });
+    const fortnightCheck = checkFortnightAvailability(worker, job);
+    if (!fortnightCheck.ok) {
+      excluded.push({ workerId: worker._id, name: worker.name, reason: fortnightCheck.reason });
       continue;
     }
 
@@ -251,6 +266,11 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
       location: worker.location,
       skillLevel: worker.skillLevel,
       priority: worker.priority,
+      // Included so the "Preview candidates" ranking table can show the
+      // same click-to-view Availability popup as the Workers page,
+      // without a second fetch per worker (see FortnightAvailability.jsx).
+      formAvailability: worker.formAvailability,
+      formAvailabilitySyncedAt: worker.formAvailabilitySyncedAt,
       total: Math.round(total * 10) / 10,
       breakdown: {
         skill: { score: round1(skill.score), gap: skill.gap },

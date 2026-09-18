@@ -2,12 +2,17 @@
  * One-time helper: run this once to get a Google OAuth2 refresh token for
  * the business's Google account, then paste it into server/.env as
  * GOOGLE_REFRESH_TOKEN. After that, the app can create Calendar events
- * (with workers invited as attendees) without asking anyone to sign in
- * again - the refresh token doesn't expire unless revoked.
+ * (with workers invited as attendees), read the fortnightly availability
+ * Google Sheet, and send the "roll out to all workers" emails - all
+ * without asking anyone to sign in again, since a refresh token doesn't
+ * expire unless revoked. Skip whichever features you don't need by
+ * removing their scope below before running this.
  *
  * Usage:
  *   1. In Google Cloud Console: create a project, enable the "Google
- *      Calendar API", and create an OAuth client ID of type "Desktop app".
+ *      Calendar API", "Google Sheets API", "Gmail API" and "Google Forms
+ *      API" (skip whichever you don't need to match the scopes below), and
+ *      create an OAuth client ID of type "Desktop app".
  *   2. Put its client ID/secret into server/.env as GOOGLE_CLIENT_ID and
  *      GOOGLE_CLIENT_SECRET.
  *   3. Nothing to add for the redirect URI - Desktop app clients don't show
@@ -18,6 +23,11 @@
  *   5. Open the printed URL, sign in with the Google account whose
  *      calendar should receive job invites, approve access.
  *   6. Copy the GOOGLE_REFRESH_TOKEN line it prints into server/.env.
+ *
+ * Re-running this script later (e.g. to add the Sheets scope to a refresh
+ * token you generated before that scope existed here) replaces the old
+ * refresh token with a new one that has whatever scopes are listed below
+ * at the time - just paste the new value over the old GOOGLE_REFRESH_TOKEN.
  */
 import "dotenv/config";
 import http from "node:http";
@@ -44,7 +54,27 @@ const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECR
 const authUrl = oauth2Client.generateAuthUrl({
   access_type: "offline",
   prompt: "consent",
-  scope: ["https://www.googleapis.com/auth/calendar.events"],
+  scope: [
+    "https://www.googleapis.com/auth/calendar.events",
+    // Read-only access to the linked "Form responses" Google Sheet - only
+    // needed for the ORIGINAL, hand-made availability form (see
+    // services/availabilitySync.js); any fortnight rolled out automatically
+    // (see services/formManager.js) is read via the Forms API scopes below
+    // instead, no spreadsheet involved. Harmless to leave granted either way.
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    // Lets the app send email AS this Google account (see
+    // services/mailer.js) - used by the Workers page's "Roll out to all
+    // workers" button to email everyone the new fortnight's form link.
+    "https://www.googleapis.com/auth/gmail.send",
+    // Lets the app CREATE the next fortnight's Google Form itself (see
+    // services/formManager.js) - this is what makes "Roll out to all
+    // workers" fully automatic instead of needing you to duplicate the
+    // form by hand first.
+    "https://www.googleapis.com/auth/forms.body",
+    // Lets the app read answers back from a form it created itself (see
+    // services/availabilitySync.js's Forms-API sync path).
+    "https://www.googleapis.com/auth/forms.responses.readonly",
+  ],
 });
 
 console.log("\n1. Open this URL in your browser and approve access:\n");

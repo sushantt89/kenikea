@@ -8,11 +8,15 @@ import {
   unassignJob,
   completeJob,
   deleteJob,
+  updateJob,
 } from "../api.js";
+import JobDraftForm from "./JobDraftForm.jsx";
 import { normalizeScore, scoreColor } from "../utils/scoreScale.js";
 import { requiredWorkerCount } from "../utils/team.js";
 import { WORK_AREA_SWATCH, timezoneForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
+import { useToast } from "../toast/ToastContext.jsx";
+import { FortnightCell, FortnightModal } from "./FortnightAvailability.jsx";
 
 const STATUS_CLASS = {
   Unassigned: "pill-gray",
@@ -109,32 +113,14 @@ function JobDescriptionView({ description }) {
   );
 }
 
-// One assigned worker's row: name/location, an editable payout amount
-// (saved on blur/Enter rather than on every keystroke), and a Remove
-// button. Kept as its own component so each row has its own local draft
-// value while typing.
-function AssignedWorkerRow({ assignment, disabled, onSavePayout, onRemove }) {
+// One assigned worker's row: name/location, an editable payout amount, and
+// a Remove button. The payout input is now a plain controlled field - it no
+// longer saves itself on blur (see the file header note on handleAssignPayouts
+// in JobCard below for why); typing here just updates the draft value kept
+// in JobCard's state, and nothing is sent to the server until the ASSIGN
+// button is clicked.
+function AssignedWorkerRow({ assignment, value, disabled, onDraftChange, onRemove }) {
   const worker = assignment.worker || {};
-  const [draft, setDraft] = useState(assignment.payout ?? "");
-  const [saving, setSaving] = useState(false);
-
-  // Keep the input in sync if the payout changes from outside this row
-  // (e.g. a refetch after some other edit) rather than only ever reading
-  // the initial value.
-  useEffect(() => {
-    setDraft(assignment.payout ?? "");
-  }, [assignment.payout]);
-
-  async function commit() {
-    const value = draft === "" ? null : Number(draft);
-    if (value === (assignment.payout ?? null)) return;
-    setSaving(true);
-    try {
-      await onSavePayout(worker._id, value);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="assigned-worker-row">
@@ -149,11 +135,9 @@ function AssignedWorkerRow({ assignment, disabled, onSavePayout, onRemove }) {
           step="0.01"
           min="0"
           placeholder="0.00"
-          value={draft}
-          disabled={disabled || saving}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onDraftChange(worker._id, e.target.value)}
         />
       </label>
       {!disabled && (
@@ -166,14 +150,34 @@ function AssignedWorkerRow({ assignment, disabled, onSavePayout, onRemove }) {
 }
 
 export default function JobCard({ job, onChange }) {
+  const { showToast } = useToast();
   const [ranking, setRanking] = useState(null);
+  const [openCandidate, setOpenCandidate] = useState(null);
   const [rankingError, setRankingError] = useState("");
   const [calendarStatus, setCalendarStatus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [payoutDrafts, setPayoutDrafts] = useState({});
+  const [editing, setEditing] = useState(false);
 
   const assignedWorkers = job.assignedWorkers || [];
   const needed = requiredWorkerCount(job);
   const teamFull = assignedWorkers.length >= needed;
+
+  // Keep the payout draft inputs in sync with the server's copy whenever the
+  // assigned team or its saved payouts change (a fresh assignment, a
+  // removal, a refetch after another edit) - each entry starts out matching
+  // whatever's already saved, and typing from there just edits this local
+  // draft until ASSIGN is clicked.
+  const assignedKey = assignedWorkers.map((a) => `${a.worker?._id || a.worker}:${a.payout ?? ""}`).join(",");
+  useEffect(() => {
+    const next = {};
+    for (const a of assignedWorkers) {
+      const id = a.worker?._id || a.worker;
+      next[id] = a.payout ?? "";
+    }
+    setPayoutDrafts(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job._id, assignedKey]);
 
   async function handlePreview() {
     setRankingError("");
@@ -196,6 +200,8 @@ export default function JobCard({ job, onChange }) {
       const result = await assignJob(job._id);
       setRanking(null);
       setCalendarStatus(result.calendarEvent);
+      const names = (result.assignedThisTime || []).map((w) => w.name).join(", ");
+      showToast(names ? `Assigned ${names} to "${job.title}"` : `Team assigned to "${job.title}"`, "success");
       onChange();
     } catch (err) {
       setRankingError(err.message);
@@ -205,12 +211,14 @@ export default function JobCard({ job, onChange }) {
   }
 
   async function handleAssignTo(workerId) {
+    const workerName = ranking?.ranking.find((r) => r.workerId === workerId)?.name || "Worker";
     setBusy(true);
     setCalendarStatus(null);
     try {
       const result = await assignJobTo(job._id, workerId);
       setRanking(null);
       setCalendarStatus(result.calendarEvent);
+      showToast(`${workerName} added to "${job.title}"`, "success");
       onChange();
     } catch (err) {
       setRankingError(err.message);
@@ -219,24 +227,54 @@ export default function JobCard({ job, onChange }) {
     }
   }
 
-  async function handleSavePayout(workerId, payout) {
+  function handleDraftChange(workerId, value) {
+    setPayoutDrafts((prev) => ({ ...prev, [workerId]: value }));
+  }
+
+  // Replaces the old auto-save-on-blur behaviour: nothing is sent to the
+  // server just from typing into a payout box anymore. Clicking ASSIGN
+  // commits every payout that's actually changed (in one go, for however
+  // many workers are on the team) and is also the moment the Google
+  // Calendar invite actually goes out - see services/googleCalendar.js:
+  // nothing is sent until every assigned worker's payout is set, so this is
+  // worth surfacing right here as the one deliberate action that finalizes
+  // it, rather than it firing the instant a payout field loses focus.
+  async function handleAssignPayouts() {
+    setBusy(true);
+    setRankingError("");
+    setCalendarStatus(null);
     try {
-      // Entering a payout is often the moment the calendar invite actually
-      // goes out - see services/googleCalendar.js: nothing is sent until
-      // every assigned worker's payout is set, so this is worth surfacing
-      // right here rather than only on the original assign action.
-      const result = await setWorkerPayout(job._id, workerId, payout);
-      setCalendarStatus(result.calendarEvent);
+      let lastResult = null;
+      let changed = false;
+      for (const a of assignedWorkers) {
+        const workerId = a.worker?._id || a.worker;
+        const draftValue = payoutDrafts[workerId];
+        const normalized = draftValue === "" || draftValue == null ? null : Number(draftValue);
+        const current = a.payout ?? null;
+        if (normalized === current) continue;
+        changed = true;
+        lastResult = await setWorkerPayout(job._id, workerId, normalized);
+      }
+      if (lastResult) {
+        setCalendarStatus(lastResult.calendarEvent);
+        showToast(`Payout${changed ? "s" : ""} assigned for "${job.title}"`, "success");
+      } else if (!changed) {
+        setRankingError("No payout changes to assign - edit a worker's payout first.");
+      }
       onChange();
     } catch (err) {
       setRankingError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleRemoveWorker(workerId) {
+    const workerName = assignedWorkers.find((a) => String(a.worker?._id || a.worker) === String(workerId))?.worker?.name || "Worker";
     setBusy(true);
     try {
       await unassignWorkerFromJob(job._id, workerId);
+      showToast(`${workerName} removed from "${job.title}"`, "success");
       onChange();
     } finally {
       setBusy(false);
@@ -247,6 +285,7 @@ export default function JobCard({ job, onChange }) {
     setBusy(true);
     try {
       await unassignJob(job._id);
+      showToast(`Team unassigned from "${job.title}"`, "success");
       onChange();
     } finally {
       setBusy(false);
@@ -257,6 +296,7 @@ export default function JobCard({ job, onChange }) {
     setBusy(true);
     try {
       await completeJob(job._id);
+      showToast(`"${job.title}" marked complete`, "success");
       onChange();
     } finally {
       setBusy(false);
@@ -268,10 +308,24 @@ export default function JobCard({ job, onChange }) {
     setBusy(true);
     try {
       await deleteJob(job._id);
+      showToast(`"${job.title}" deleted`, "success");
       onChange();
     } finally {
       setBusy(false);
     }
+  }
+
+  // Reuses the exact same form Home.jsx uses to create a job - see
+  // JobDraftForm's isEdit flag, which just changes a couple of labels.
+  // Available regardless of job status: a scraped or manually-entered
+  // detail (address, duration, price, etc.) can turn out wrong after the
+  // job's already been assigned or even completed, and there's no reason
+  // to block fixing it.
+  async function handleSaveEdit(form) {
+    const updated = await updateJob(job._id, form);
+    showToast(`"${updated.title}" updated`, "success");
+    setEditing(false);
+    onChange();
   }
 
   const adminPay = job.pay?.adminPay ?? null;
@@ -330,15 +384,24 @@ export default function JobCard({ job, onChange }) {
 
       {assignedWorkers.length > 0 && (
         <div className="assigned-team">
-          {assignedWorkers.map((a) => (
-            <AssignedWorkerRow
-              key={a.worker?._id || a.worker}
-              assignment={a}
-              disabled={job.status === "Completed" || busy}
-              onSavePayout={handleSavePayout}
-              onRemove={handleRemoveWorker}
-            />
-          ))}
+          {assignedWorkers.map((a) => {
+            const workerId = a.worker?._id || a.worker;
+            return (
+              <AssignedWorkerRow
+                key={workerId}
+                assignment={a}
+                value={payoutDrafts[workerId] ?? ""}
+                disabled={job.status === "Completed" || busy}
+                onDraftChange={handleDraftChange}
+                onRemove={handleRemoveWorker}
+              />
+            );
+          })}
+          {job.status !== "Completed" && (
+            <button className="btn btn-small btn-primary" onClick={handleAssignPayouts} disabled={busy}>
+              ASSIGN
+            </button>
+          )}
         </div>
       )}
 
@@ -374,7 +437,7 @@ export default function JobCard({ job, onChange }) {
 
       {calendarPending && (
         <p className="muted small pending-note">
-          Calendar invite pending - enter a payout for every assigned worker to send it.
+          Calendar invite pending - enter a payout for every assigned worker and click ASSIGN to send it.
         </p>
       )}
 
@@ -409,11 +472,13 @@ export default function JobCard({ job, onChange }) {
         </div>
       )}
 
-      <p className="muted small">
-        <a href={job.sourceUrl} target="_blank" rel="noreferrer">
-          View source link
-        </a>
-      </p>
+      {job.sourceUrl && (
+        <p className="muted small">
+          <a href={job.sourceUrl} target="_blank" rel="noreferrer">
+            View source link
+          </a>
+        </p>
+      )}
 
       <div className="job-actions">
         {job.status !== "Completed" && (
@@ -436,6 +501,9 @@ export default function JobCard({ job, onChange }) {
             </button>
           </>
         )}
+        <button className="btn btn-small" onClick={() => setEditing(true)} disabled={busy}>
+          Edit
+        </button>
         <button className="btn btn-small btn-danger" onClick={handleDelete} disabled={busy}>
           Delete
         </button>
@@ -458,6 +526,7 @@ export default function JobCard({ job, onChange }) {
               <thead>
                 <tr>
                   <th>Worker</th>
+                  <th>Availability</th>
                   <th>Score</th>
                   <th>Skill</th>
                   <th>Location</th>
@@ -470,6 +539,9 @@ export default function JobCard({ job, onChange }) {
                 {ranking.ranking.map((r, i) => (
                   <tr key={r.workerId} className={i === 0 ? "top-candidate" : ""}>
                     <td>{r.name}</td>
+                    <td>
+                      <FortnightCell worker={r} onOpen={setOpenCandidate} />
+                    </td>
                     <ScoreCell raw={r.total} kind="total" tooltip={`Raw total score: ${r.total}`} />
                     <ScoreCell
                       raw={r.breakdown.skill.score}
@@ -517,10 +589,28 @@ export default function JobCard({ job, onChange }) {
             </div>
           )}
           {ranking.excluded.length > 0 && (
-            <p className="muted small">
-              Excluded: {ranking.excluded.map((e) => `${e.name} (${e.reason})`).join(", ")}
-            </p>
+            <div className="excluded-list">
+              <p className="muted small excluded-list-title">
+                Excluded ({ranking.excluded.length})
+              </p>
+              <ul className="excluded-list-items">
+                {ranking.excluded.map((e) => (
+                  <li key={e.workerId}>
+                    <span className="excluded-list-name">{e.name}</span>
+                    <span className="excluded-list-reason">{e.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
+        </div>
+      )}
+      <FortnightModal worker={openCandidate} onClose={() => setOpenCandidate(null)} />
+      {editing && (
+        <div className="job-edit-modal-backdrop" onClick={() => setEditing(false)}>
+          <div className="job-edit-modal-panel" onClick={(e) => e.stopPropagation()}>
+            <JobDraftForm draft={job} onSave={handleSaveEdit} onDiscard={() => setEditing(false)} />
+          </div>
         </div>
       )}
     </div>

@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useTheme } from "../theme/ThemeContext.jsx";
 import { getUsers, createUser, deleteUser } from "../api.js";
+import { useToast } from "../toast/ToastContext.jsx";
 
 const EMPTY_FORM = { name: "", email: "", password: "", confirmPassword: "" };
 
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { showToast } = useToast();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +56,7 @@ export default function Settings() {
     try {
       await createUser({ name: form.name, email: form.email, password: form.password });
       setForm(EMPTY_FORM);
+      showToast(`${form.name} added as a user`, "success");
       await loadUsers();
     } catch (err) {
       setFormError(err.message);
@@ -66,6 +69,7 @@ export default function Settings() {
     if (!window.confirm(`Remove ${u.name}'s login? They won't be able to log in anymore.`)) return;
     try {
       await deleteUser(u._id);
+      showToast(`${u.name}'s login removed`, "success");
       await loadUsers();
     } catch (err) {
       setListError(err.message);

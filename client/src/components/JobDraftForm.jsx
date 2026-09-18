@@ -73,9 +73,19 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
     }
   }
 
+  // A manually-created job (see Home.jsx's "+ Create a job manually")
+  // never has a sourceUrl at all, unlike a scraped draft - used here to
+  // adjust the heading and hide the (otherwise blank/meaningless) Source
+  // line further down.
+  const isManual = !form.sourceUrl;
+  // Editing an already-saved job (opened from JobCard.jsx's "Edit" button)
+  // reuses this exact same form - only a saved job ever has an _id, so
+  // that's what tells the two apart for the heading/button wording below.
+  const isEdit = Boolean(form._id);
+
   return (
     <div className="card draft-card">
-      <h2>Review scraped job</h2>
+      <h2>{isEdit ? "Edit job" : isManual ? "New job (manual)" : "Review scraped job"}</h2>
       {form.extraction?.notes && (
         <div className="banner banner-warning">Heads up: {form.extraction.notes}. Please double check the fields below.</div>
       )}
@@ -209,14 +219,14 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
         </div>
       </div>
 
-      <p className="muted small">Source: {form.sourceUrl}</p>
+      {!isManual && <p className="muted small">Source: {form.sourceUrl}</p>}
 
       <div className="form-actions">
         <button className="btn btn-secondary" onClick={onDiscard} disabled={saving}>
-          Discard
+          {isEdit ? "Cancel" : "Discard"}
         </button>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save job"}
+          {saving ? "Saving..." : isEdit ? "Save changes" : "Save job"}
         </button>
       </div>
     </div>

@@ -14,9 +14,11 @@ const JobSchema = new Schema(
       type: String,
       default: "",
     },
+    // Blank for a manually-created job (see client's Home.jsx "+ Create a
+    // job manually" button) - only a job scraped from a real link has one.
     sourceUrl: {
       type: String,
-      required: [true, "Source URL is required"],
+      default: "",
       trim: true,
     },
     location: {

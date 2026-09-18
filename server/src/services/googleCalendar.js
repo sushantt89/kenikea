@@ -184,10 +184,12 @@ function buildDescription(job, team, payoutView) {
 
   pushRawSection(lines, "Job details", jobDetailLines(job.description));
 
+  // Name and phone only - the customer's email is deliberately left out
+  // of the calendar invite (workers don't need it, and it's still visible
+  // in the app's own Jobs tab for admin use).
   const customerItems = [];
   if (job.customer?.name) customerItems.push(`Name: ${job.customer.name}`);
   if (job.customer?.phone) customerItems.push(`Phone: ${job.customer.phone}`);
-  if (job.customer?.email) customerItems.push(`Email: ${job.customer.email}`);
   pushSection(lines, "Customer", customerItems);
 
   const payItems = [];
@@ -263,13 +265,25 @@ export async function createAssignmentEvent(job, team, options = {}) {
   // as" the same real time everyone would expect for that job's location.
   const timeZone = timezoneForWorkArea(effectiveWorkArea);
 
+  // Prefix the event title with whoever is actually invited to THIS event
+  // (not always the full team - a personal, single-worker event should only
+  // show that one worker's name, not the whole team's), joined with "+" for
+  // more than one, so a shared calendar reads "Ana + Ben - Job: ..." at a
+  // glance without opening the event. Falls back to no prefix if somehow
+  // none of the invitees have a name.
+  const namePrefix = invitable
+    .map((w) => w.name)
+    .filter(Boolean)
+    .join(" + ");
+  const summary = namePrefix ? `${namePrefix} - Job: ${job.title}` : `Job: ${job.title}`;
+
   try {
     const calendar = getClient();
     const { data } = await calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
       sendUpdates: "all",
       requestBody: {
-        summary: `Job: ${job.title}`,
+        summary,
         description,
         location: job.location || undefined,
         start: { dateTime: start.toISOString(), timeZone },
