@@ -1,7 +1,6 @@
 import "dotenv/config";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import { connectDB } from "./db.js";
@@ -10,8 +9,7 @@ import { ensureDefaultAdmin } from "./services/auth.js";
 import authRouter from "./routes/auth.js";
 import workersRouter from "./routes/workers.js";
 import jobsRouter from "./routes/jobs.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { clientDistPath, isSingleServiceDeployment } from "./utils/deployment.js";
 
 const app = express();
 
@@ -45,9 +43,10 @@ app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
 // `npm run build` has actually produced client/dist; in normal local
 // development that folder doesn't exist (the client instead runs on its own
 // via Vite's dev server on :5173, proxying /api to this server - see
-// client/vite.config.js), so none of this changes local dev at all.
-const clientDistPath = path.join(__dirname, "../../client/dist");
-if (fs.existsSync(clientDistPath)) {
+// client/vite.config.js), so none of this changes local dev at all. (See
+// utils/deployment.js - routes/auth.js's password-reset email asks the
+// same isSingleServiceDeployment question to pick the right link.)
+if (isSingleServiceDeployment) {
   app.use(express.static(clientDistPath));
   // Anything left over that isn't an /api request (already handled/404'd
   // above) is a client-side route (react-router) - hand back index.html and

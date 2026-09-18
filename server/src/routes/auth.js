@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import { hashPassword, verifyPassword, createToken, generateResetToken, verifyResetToken } from "../services/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { sendEmail } from "../services/mailer.js";
+import { isSingleServiceDeployment } from "../utils/deployment.js";
 
 const router = Router();
 
@@ -43,20 +44,30 @@ router.post("/login", async (req, res, next) => {
 // the "send" step) - same "don't let this route be used to probe which
 // emails have accounts" reasoning as /login's single wrong-email-or-
 // password message above.
-// The base URL the reset link should point at. CLIENT_ORIGIN is used when
-// it's explicitly set (local dev, or any deployment that sets it
-// on purpose - see .env.example), but the single-service Render setup
-// documented in the README deliberately leaves it UNSET (frontend and API
-// are the same origin there, so there's nothing to CORS-allow) - falling
-// back to a hardcoded localhost default in that case would silently put a
-// broken "http://localhost:5173/..." link in every password-reset email
-// sent from production. The incoming request's own origin is the correct
-// fallback instead: in that single-service setup it genuinely IS the
-// real public URL (req.protocol needs app.set("trust proxy", 1) in
-// index.js to correctly report "https" behind Render's proxy - see there).
+// The base URL the reset link should point at.
+//
+// If CLIENT_ORIGIN is explicitly set, that always wins - someone set it
+// on purpose (see .env.example).
+//
+// Otherwise it depends on which of the two setups this server is
+// actually running as (see utils/deployment.js):
+//   - Single-service (Render, once `npm run build` has produced
+//     client/dist and this same server is serving it): the incoming
+//     request's own origin genuinely IS the public client URL, so that's
+//     used - req.protocol needs app.set("trust proxy", 1) in index.js to
+//     correctly report "https" behind Render's proxy for this to come out
+//     right.
+//   - Local dev (client/dist doesn't exist - the client runs separately
+//     via Vite's own dev server on :5173, proxying /api to this one):
+//     the incoming request's own origin is THIS server's port (5000 by
+//     default), which is NOT where the client lives - using it here was a
+//     real bug (it put a http://localhost:5000/... link, the API's own
+//     port, into the email instead of the Vite dev server's), so this
+//     case falls back to the Vite dev server's own default port instead.
 function resolveClientOrigin(req) {
   if (process.env.CLIENT_ORIGIN) return process.env.CLIENT_ORIGIN;
-  return `${req.protocol}://${req.get("host")}`;
+  if (isSingleServiceDeployment) return `${req.protocol}://${req.get("host")}`;
+  return "http://localhost:5173";
 }
 
 router.post("/forgot-password", async (req, res, next) => {
