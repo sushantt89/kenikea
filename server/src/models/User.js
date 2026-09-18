@@ -26,6 +26,20 @@ const UserSchema = new Schema(
       type: String,
       required: true,
     },
+    // "Forgot password" support (see routes/auth.js POST /forgot-password
+    // and /reset-password, services/auth.js generateResetToken/
+    // verifyResetToken). Only ever a HASH of the token that was emailed -
+    // never the raw token itself - same reasoning as passwordHash above: a
+    // database leak alone shouldn't be enough to let someone reset an
+    // account's password. null/null means no reset is currently pending.
+    resetTokenHash: {
+      type: String,
+      default: null,
+    },
+    resetTokenExpires: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

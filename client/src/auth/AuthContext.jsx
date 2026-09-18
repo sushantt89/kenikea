@@ -49,10 +49,32 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A stale/expired saved token doesn't just surface mid-use (a session
+  // expiring while the app is already open) - it also surfaces on the
+  // VERY FIRST load of a standalone public page like /login,
+  // /forgot-password or /reset-password (AuthProvider always verifies
+  // whatever token happens to be in localStorage on mount, regardless of
+  // which route is being rendered). logout()'s unconditional navigate("/login")
+  // is exactly right for the first case, but for the second it actively
+  // breaks things - it was yanking someone straight from a freshly-opened
+  // password-reset link to the login page before they ever saw the reset
+  // form, just because some OLD token happened to still be sitting in
+  // localStorage. Clearing the stale token is still correct either way;
+  // only the forced navigate is skipped when already on one of those
+  // standalone pages, since App.jsx already renders the right thing there
+  // once `user` is null.
   useEffect(() => {
-    window.addEventListener("auth:unauthorized", logout);
-    return () => window.removeEventListener("auth:unauthorized", logout);
-  }, [logout]);
+    function handleUnauthorized() {
+      setAuthToken(null);
+      setUser(null);
+      const standalonePublicPaths = ["/login", "/forgot-password", "/reset-password"];
+      if (!standalonePublicPaths.includes(window.location.pathname)) {
+        navigate("/login");
+      }
+    }
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
+  }, [navigate]);
 
   async function login(email, password) {
     const { token, user } = await apiLogin(email, password);

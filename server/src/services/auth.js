@@ -97,6 +97,47 @@ export function verifyToken(token) {
   }
 }
 
+// "Forgot password" tokens - deliberately separate from the session
+// tokens above (those prove "you're logged in as X"; these prove "you
+// clicked the reset link that was just emailed to X's inbox", nothing
+// more). A reset token is high-entropy random bytes, not a low-entropy
+// user-chosen password, so a plain fast SHA-256 hash (rather than the
+// slow, memory-hard scrypt used for passwords above) is the right tool
+// here - there's no realistic brute-force risk to defend against, only
+// "don't store the raw, usable token in the database".
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function hashResetToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+/**
+ * Starts a password reset: a random raw token (only ever emailed to the
+ * user, never stored) plus the hash of it that DOES get stored on the
+ * User doc (see routes/auth.js POST /forgot-password), and an expiry.
+ */
+export function generateResetToken() {
+  const token = crypto.randomBytes(32).toString("base64url");
+  return { token, tokenHash: hashResetToken(token), expires: new Date(Date.now() + RESET_TOKEN_TTL_MS) };
+}
+
+/**
+ * True if `token` (the raw value from the reset link) matches `user`'s
+ * currently-pending reset token and it hasn't expired yet. Constant-time
+ * comparison for the same reason verifyPassword() above uses one - no
+ * reason to let response timing leak how close a guess was.
+ */
+export function verifyResetToken(user, token) {
+  if (!user?.resetTokenHash || !user?.resetTokenExpires) return false;
+  if (user.resetTokenExpires.getTime() < Date.now()) return false;
+  if (!token) return false;
+
+  const expected = Buffer.from(user.resetTokenHash, "hex");
+  const actual = Buffer.from(hashResetToken(token), "hex");
+  if (actual.length !== expected.length) return false;
+  return crypto.timingSafeEqual(actual, expected);
+}
+
 /**
  * Runs once at server startup. If no user accounts exist yet (a fresh
  * database), creates one so there's a way to log in at all - there's no

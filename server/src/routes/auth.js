@@ -1,7 +1,8 @@
 import { Router } from "express";
 import User from "../models/User.js";
-import { hashPassword, verifyPassword, createToken } from "../services/auth.js";
+import { hashPassword, verifyPassword, createToken, generateResetToken, verifyResetToken } from "../services/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { sendEmail } from "../services/mailer.js";
 
 const router = Router();
 
@@ -29,6 +30,99 @@ router.post("/login", async (req, res, next) => {
 
     const token = createToken(user);
     res.json({ token, user: publicUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/forgot-password - request a password reset link by
+// email. Unauthenticated on purpose (that's the whole point - you're here
+// because you're locked out). Always responds with the same generic
+// message whether or not that email actually has an account, and takes
+// the same amount of visible action either way (no early-return before
+// the "send" step) - same "don't let this route be used to probe which
+// emails have accounts" reasoning as /login's single wrong-email-or-
+// password message above.
+// The base URL the reset link should point at. CLIENT_ORIGIN is used when
+// it's explicitly set (local dev, or any deployment that sets it
+// on purpose - see .env.example), but the single-service Render setup
+// documented in the README deliberately leaves it UNSET (frontend and API
+// are the same origin there, so there's nothing to CORS-allow) - falling
+// back to a hardcoded localhost default in that case would silently put a
+// broken "http://localhost:5173/..." link in every password-reset email
+// sent from production. The incoming request's own origin is the correct
+// fallback instead: in that single-service setup it genuinely IS the
+// real public URL (req.protocol needs app.set("trust proxy", 1) in
+// index.js to correctly report "https" behind Render's proxy - see there).
+function resolveClientOrigin(req) {
+  if (process.env.CLIENT_ORIGIN) return process.env.CLIENT_ORIGIN;
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+router.post("/forgot-password", async (req, res, next) => {
+  const generic = { message: "If an account exists for that email, we've sent a password reset link." };
+  try {
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    const user = email ? await User.findOne({ email }) : null;
+
+    if (user) {
+      const { token, tokenHash, expires } = generateResetToken();
+      user.resetTokenHash = tokenHash;
+      user.resetTokenExpires = expires;
+      await user.save();
+
+      const resetUrl = `${resolveClientOrigin(req)}/reset-password?email=${encodeURIComponent(
+        user.email
+      )}&token=${token}`;
+      const result = await sendEmail({
+        to: user.email,
+        subject: "Reset your password",
+        body: `Hi ${user.name},
+
+Someone (hopefully you) asked to reset the password for this account.
+
+Click the link below to choose a new one - it expires in 1 hour and only works once:
+${resetUrl}
+
+If you didn't ask for this, you can safely ignore this email - your password hasn't been changed.`,
+      });
+      // Still the generic response either way - only logged server-side,
+      // so a misconfigured mailer doesn't fail silently forever but also
+      // doesn't tell an outside caller anything about this email.
+      if (!result.sent) console.error(`[auth] Couldn't send password reset email to ${user.email}:`, result.reason);
+    }
+
+    res.json(generic);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/reset-password - completes a reset started above.
+// Body: { email, token, password }
+router.post("/reset-password", async (req, res, next) => {
+  try {
+    const { email, token, password } = req.body || {};
+    if (!email || !token || !password) {
+      return res.status(400).json({ error: "Email, reset link, and new password are all required." });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters." });
+    }
+
+    const user = await User.findOne({ email: String(email).toLowerCase().trim() });
+    if (!user || !verifyResetToken(user, token)) {
+      // Deliberately generic - covers "no such account", "wrong/tampered
+      // token", and "expired" alike, same reasoning as /login above.
+      return res.status(400).json({ error: "This reset link is invalid or has expired - request a new one." });
+    }
+
+    user.passwordHash = hashPassword(password);
+    user.resetTokenHash = null;
+    user.resetTokenExpires = null;
+    await user.save();
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

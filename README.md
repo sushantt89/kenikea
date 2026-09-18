@@ -164,6 +164,22 @@ switches the whole app's color scheme instantly. It's remembered per
 browser (via `localStorage`), defaults to your system's own light/dark
 setting the first time, and needs no server round-trip to change.
 
+**Forgot password:** the login page has a "Forgot password?" link
+(`/forgot-password`) - enter your account's email and, if it matches an
+account, a reset link is emailed to it via the same Gmail API integration
+used for the fortnight rollout emails (see `GOOGLE_CLIENT_ID`/
+`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` in `.env.example`, which
+needs the `gmail.send` scope - `npm run get-google-token` already requests
+it). The email always says the same generic thing whether or not that
+address actually has an account, so this can't be used to check who has a
+login. The link (`/reset-password?...`) is single-use and expires after 1
+hour; following it lets you set a new password (8+ characters) without
+being logged in. If Gmail sending isn't configured, this silently doesn't
+send anything - either add proper Gmail credentials first, or have
+whoever's already logged in remove your account and re-add it with a
+password you choose (Settings has no separate "change password" for an
+existing account yet, so that's the only other way to reset one).
+
 ## 6. Try it with mock data first
 
 Before wiring up a real job link, you can seed the database with a handful
@@ -873,7 +889,7 @@ shared automatically):
 | `GOOGLE_AVAILABILITY_SHEET_ID` / `GOOGLE_AVAILABILITY_SHEET_RANGE` | Same values as local, if you've set up the availability sync (see section 18) |
 | `GEOCODE_CONTACT` | Same as local |
 | `LOCATIONIQ_API_KEY` | Same as local, if set |
-| `CLIENT_ORIGIN` | Not needed anymore in this single-service setup (frontend and API are now the same origin) - fine to leave unset |
+| `CLIENT_ORIGIN` | Not needed anymore in this single-service setup (frontend and API are now the same origin) - fine to leave unset. The password-reset email's link falls back to Render's own request origin when this is unset, so it correctly points at your real `https://your-app.onrender.com` URL instead of `localhost` - see routes/auth.js's `resolveClientOrigin()` |
 
 Don't set `PORT` - Render provides that automatically and the app already
 reads `process.env.PORT`.

@@ -15,6 +15,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
+// Needed for req.protocol to correctly report "https" (not "http") once
+// this sits behind Render's reverse proxy, which terminates TLS and
+// forwards the original scheme via X-Forwarded-Proto - without this,
+// Express ignores that header and req.protocol is always "http" no matter
+// what the real external request used. Used by routes/auth.js's password
+// reset email to build a correct link when CLIENT_ORIGIN isn't set (see
+// its resolveClientOrigin()) - harmless locally, where there's no proxy.
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:5173" }));
 app.use(express.json({ limit: "1mb" }));
 

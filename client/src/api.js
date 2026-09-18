@@ -61,6 +61,10 @@ async function request(path, options = {}) {
 // Auth
 export const login = (email, password) =>
   request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+export const forgotPassword = (email) =>
+  request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+export const resetPassword = (data) =>
+  request("/auth/reset-password", { method: "POST", body: JSON.stringify(data) });
 export const getMe = () => request("/auth/me");
 export const getUsers = () => request("/auth/users");
 export const createUser = (data) => request("/auth/users", { method: "POST", body: JSON.stringify(data) });

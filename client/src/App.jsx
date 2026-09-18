@@ -5,6 +5,8 @@ import Home from "./pages/Home.jsx";
 import Jobs from "./pages/Jobs.jsx";
 import Workers from "./pages/Workers.jsx";
 import Login from "./pages/Login.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 import Settings from "./pages/Settings.jsx";
 
 // Guards a route: bounces to /login (remembering where the user was headed)
@@ -30,6 +32,8 @@ export default function App() {
       <main className={user ? "app-content" : "app-content app-content-bare"}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+          <Route path="/forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPassword />} />
+          <Route path="/reset-password" element={user ? <Navigate to="/" replace /> : <ResetPassword />} />
           <Route
             path="/"
             element={

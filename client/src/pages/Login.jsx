@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 
 export default function Login() {
@@ -56,6 +56,9 @@ export default function Login() {
               required
             />
           </label>
+          <p className="muted small" style={{ textAlign: "right", marginTop: -6 }}>
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={submitting} style={{ width: "100%" }}>
               {submitting ? "Logging in..." : "Log in"}
