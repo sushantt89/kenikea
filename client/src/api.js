@@ -77,6 +77,8 @@ export const createWorker = (data) => request("/workers", { method: "POST", body
 export const updateWorker = (id, data) =>
   request(`/workers/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteWorker = (id) => request(`/workers/${id}`, { method: "DELETE" });
+export const updateWorkerAvailability = (id, entries) =>
+  request(`/workers/${id}/availability`, { method: "PUT", body: JSON.stringify({ entries }) });
 export const syncWorkerAvailability = () => request("/workers/sync-availability", { method: "POST" });
 export const getRolloutStatus = () => request("/workers/rollout-status");
 export const updateRolloutFormUrl = (formUrl) =>

@@ -197,6 +197,40 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
+// PUT /api/workers/:id/availability - manually correct a worker's
+// fortnight availability text from the "Click to see" popup
+// (FortnightAvailability.jsx), without waiting on the next Google Form
+// sync to overwrite it. Body: { entries: [{ date, text }] } - replaces
+// the worker's ENTIRE formAvailability array with exactly what's given
+// (the popup always edits the full list it's currently showing, so a
+// partial/merge update isn't needed). Deliberately leaves
+// formAvailabilitySyncedAt untouched - this is a manual correction, not a
+// sync, so the "Last synced ..." timestamp shown in the popup should keep
+// reflecting when the form was actually last pulled from.
+router.put("/:id/availability", async (req, res, next) => {
+  try {
+    const worker = await Worker.findById(req.params.id);
+    if (!worker) return res.status(404).json({ error: "Worker not found" });
+
+    const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
+    const cleaned = [];
+    for (const e of entries) {
+      const date = new Date(e?.date);
+      if (Number.isNaN(date.getTime())) {
+        return res.status(400).json({ error: "One of the availability entries has an invalid date." });
+      }
+      cleaned.push({ date, text: String(e?.text || "").trim() });
+    }
+
+    worker.formAvailability = cleaned;
+    await worker.save();
+
+    res.json({ formAvailability: worker.formAvailability, formAvailabilitySyncedAt: worker.formAvailabilitySyncedAt });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/workers/:id
 router.delete("/:id", async (req, res, next) => {
   try {

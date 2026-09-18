@@ -2,8 +2,16 @@ import { useState } from "react";
 import { WORK_AREA_SWATCH } from "../utils/workAreas.js";
 import { FortnightCell, FortnightModal } from "./FortnightAvailability.jsx";
 
-export default function WorkerTable({ workers, onEdit, onDelete }) {
+export default function WorkerTable({ workers, onEdit, onDelete, onAvailabilityChange }) {
   const [openWorker, setOpenWorker] = useState(null);
+
+  // After a save inside FortnightModal, show the just-saved data immediately
+  // (openWorker is a snapshot from the `workers` prop, so it won't reflect
+  // the edit on its own) and let the caller refetch the table's data too.
+  function handleAvailabilitySaved(updated) {
+    setOpenWorker(updated);
+    onAvailabilityChange?.();
+  }
 
   if (workers.length === 0) {
     return <p className="empty-state">No workers yet. Add your first one above.</p>;
@@ -65,7 +73,7 @@ export default function WorkerTable({ workers, onEdit, onDelete }) {
         ))}
       </tbody>
     </table>
-    <FortnightModal worker={openWorker} onClose={() => setOpenWorker(null)} />
+    <FortnightModal worker={openWorker} onClose={() => setOpenWorker(null)} onSaved={handleAvailabilitySaved} />
     </div>
   );
 }

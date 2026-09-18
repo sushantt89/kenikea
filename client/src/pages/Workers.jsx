@@ -271,17 +271,38 @@ export default function Workers() {
       )}
 
       {(showForm || editing) && (
-        <div className="card">
-          <h2>{editing ? `Edit ${editing.name}` : "New worker"}</h2>
-          <WorkerForm
-            initial={editing}
-            submitLabel={editing ? "Save changes" : "Add worker"}
-            onSubmit={handleSubmit}
-            onCancel={() => {
-              setShowForm(false);
-              setEditing(null);
-            }}
-          />
+        <div
+          className="form-modal-backdrop"
+          onClick={() => {
+            setShowForm(false);
+            setEditing(null);
+          }}
+        >
+          <div className="form-modal-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="form-modal-close"
+              onClick={() => {
+                setShowForm(false);
+                setEditing(null);
+              }}
+              aria-label="Close"
+            >
+              &times;
+            </button>
+            <div className="card">
+              <h2>{editing ? `Edit ${editing.name}` : "New worker"}</h2>
+              <WorkerForm
+                initial={editing}
+                submitLabel={editing ? "Save changes" : "Add worker"}
+                onSubmit={handleSubmit}
+                onCancel={() => {
+                  setShowForm(false);
+                  setEditing(null);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -295,6 +316,7 @@ export default function Workers() {
             setShowForm(true);
           }}
           onDelete={handleDelete}
+          onAvailabilityChange={load}
         />
       )}
     </div>

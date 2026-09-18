@@ -464,8 +464,19 @@ textarea:focus {
   opacity: 0.9;
 }
 
-/* ---------- Edit-job modal (JobCard "Edit" button, reuses JobDraftForm) ---------- */
-.job-edit-modal-backdrop {
+/* ---------- Form modal (job edit/create, worker add/edit - any full-size
+   form shown as a modal rather than inline in the page) ----------
+   `align-items: flex-start` + `overflow-y: auto` on the BACKDROP (not just
+   the panel) + `margin: auto` on the panel itself is deliberate: a form
+   taller than the viewport (very common on a phone, with the on-screen
+   keyboard also eating vertical space) needs the BACKDROP to be what
+   scrolls, so every field stays reachable - centering with `align-items:
+   center` and no backdrop scroll (the old fortnight-modal approach below
+   used to do exactly that) silently clips whatever doesn't fit above/below
+   the fold, with no way to scroll up to reach it. `margin: auto` on the
+   panel still centers it normally whenever it's shorter than the
+   viewport, so this isn't a tradeoff either way. */
+.form-modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(20, 22, 31, 0.45);
@@ -474,12 +485,38 @@ textarea:focus {
   justify-content: center;
   padding: 24px 20px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   z-index: 60;
 }
 
-.job-edit-modal-panel {
+.form-modal-panel {
+  position: relative;
   width: 100%;
   max-width: 640px;
+  margin: auto 0;
+}
+
+/* A visible cross/close icon in the top-right corner of every form modal
+   (worker add/edit, job create/review, job edit) - previously the only way
+   to close one was the Cancel/Discard button inside the form itself, or
+   tapping the backdrop, neither of which is as discoverable as the "X"
+   the fortnight-availability popup already has (.fortnight-modal-close). */
+.form-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  z-index: 2;
+}
+
+.form-modal-close:hover {
+  color: var(--text);
 }
 
 .small {
@@ -502,14 +539,22 @@ textarea:focus {
   cursor: pointer;
 }
 
+/* Same reachable-on-mobile fix as .form-modal-backdrop above: the
+   backdrop scrolls (not just the panel), so a popup taller than a phone's
+   visible viewport - easy to hit here since mobile's "100vh"/"80vh" can be
+   taller than what's actually visible once the browser's address bar is
+   showing - never leaves its top half unreachable with no way to scroll
+   up to it. */
 .fortnight-modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(20, 22, 31, 0.45);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   z-index: 50;
 }
 
@@ -519,9 +564,8 @@ textarea:focus {
   box-shadow: var(--shadow-lg);
   padding: 20px 22px;
   width: 100%;
-  max-width: 380px;
-  max-height: 80vh;
-  overflow-y: auto;
+  max-width: 420px;
+  margin: auto 0;
 }
 
 .fortnight-modal-header {
@@ -574,6 +618,27 @@ textarea:focus {
 .fortnight-modal-text {
   text-align: right;
   color: var(--muted);
+}
+
+/* Edit mode: each row's text becomes an input instead of plain text, sized
+   down to fit comfortably inside the popup (the default global input
+   padding/font-size is a bit large for a dense 14-row list). */
+.fortnight-modal-list-editing li {
+  align-items: center;
+}
+
+.fortnight-modal-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+.fortnight-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 /* ---------- Toast notifications ---------- */
@@ -942,6 +1007,15 @@ table {
 }
 
 /* ---------- Filter bar (Jobs page) ---------- */
+
+/* ---------- Jobs page free-text search ---------- */
+.jobs-search-card {
+  padding: 14px 18px;
+}
+
+.jobs-search-input {
+  font-size: 0.95rem;
+}
 
 .filter-bar {
   display: flex;

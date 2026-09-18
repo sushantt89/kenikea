@@ -56,6 +56,32 @@ function periodRange(period) {
   return null; // "all" - no range
 }
 
+// One lowercased blob of everything a user might plausibly search a job
+// by - the job's title (which already includes its IKEA "Job 123456" id,
+// see scraper.js), its own Mongo id (in case that gets pasted instead),
+// location, work area, status, description, customer details, and any
+// assigned workers' names. Built fresh per job on each search rather than
+// memoized per-job - the job lists here are small enough (an admin tool's
+// worth of jobs, not a consumer-scale table) that this is unmeasurable.
+function jobSearchText(job) {
+  const assignedNames = (job.assignedWorkers || []).map((a) => a.worker?.name).filter(Boolean);
+  return [
+    job.title,
+    job._id,
+    job.location,
+    job.workArea,
+    job.status,
+    job.description,
+    job.customer?.name,
+    job.customer?.phone,
+    job.customer?.email,
+    ...assignedNames,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 function formatForExport(job) {
   const date = jobDate(job);
   const assignedWorkers = job.assignedWorkers || [];
@@ -91,6 +117,7 @@ export default function Jobs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [search, setSearch] = useState("");
   const [period, setPeriod] = useState("all");
   const [workerFilter, setWorkerFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -130,7 +157,9 @@ export default function Jobs() {
 
   const filteredJobs = useMemo(() => {
     const range = periodRange(period);
+    const query = search.trim().toLowerCase();
     return jobs.filter((job) => {
+      if (query && !jobSearchText(job).includes(query)) return false;
       if (range) {
         const d = jobDate(job);
         if (!d || d < range[0] || d >= range[1]) return false;
@@ -149,7 +178,7 @@ export default function Jobs() {
       }
       return true;
     });
-  }, [jobs, period, workerFilter, statusFilter, workAreaFilter]);
+  }, [jobs, period, workerFilter, statusFilter, workAreaFilter, search]);
 
   function handleExport() {
     const rows = filteredJobs.map(formatForExport);
@@ -168,6 +197,16 @@ export default function Jobs() {
       </div>
 
       {error && <div className="banner banner-error">{error}</div>}
+
+      <div className="card jobs-search-card">
+        <input
+          type="search"
+          className="jobs-search-input"
+          placeholder="Search by job, customer, worker, location..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
       <div className="card filter-bar">
         <label>

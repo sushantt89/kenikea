@@ -93,8 +93,6 @@ export default function Home() {
             />
           </label>
           <p className="muted small">
-            If the link includes an access token as part of the URL, it's fetched exactly as
-            pasted - no extra setup needed.{" "}
             <button
               type="button"
               className="link-button"
@@ -130,7 +128,14 @@ export default function Home() {
       </p>
 
       {draft && (
-        <JobDraftForm draft={draft} onSave={handleSaveDraft} onDiscard={() => setDraft(null)} />
+        <div className="form-modal-backdrop" onClick={() => setDraft(null)}>
+          <div className="form-modal-panel" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="form-modal-close" onClick={() => setDraft(null)} aria-label="Close">
+              &times;
+            </button>
+            <JobDraftForm draft={draft} onSave={handleSaveDraft} onDiscard={() => setDraft(null)} />
+          </div>
+        </div>
       )}
     </div>
   );

@@ -192,6 +192,17 @@ export default function JobCard({ job, onChange }) {
     }
   }
 
+  // After a save inside FortnightModal, show the just-saved data right away
+  // (openCandidate is a snapshot from the ranking/excluded list, so it won't
+  // reflect the edit on its own), then re-run the whole preview - a
+  // corrected day can change whether this or another worker gets excluded,
+  // so the ranking/excluded lists themselves need refreshing, not just this
+  // one row.
+  function handleCandidateAvailabilitySaved(updated) {
+    setOpenCandidate(updated);
+    handlePreview();
+  }
+
   async function handleAutoAssign() {
     setBusy(true);
     setRankingError("");
@@ -605,10 +616,13 @@ export default function JobCard({ job, onChange }) {
           )}
         </div>
       )}
-      <FortnightModal worker={openCandidate} onClose={() => setOpenCandidate(null)} />
+      <FortnightModal worker={openCandidate} onClose={() => setOpenCandidate(null)} onSaved={handleCandidateAvailabilitySaved} />
       {editing && (
-        <div className="job-edit-modal-backdrop" onClick={() => setEditing(false)}>
-          <div className="job-edit-modal-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="form-modal-backdrop" onClick={() => setEditing(false)}>
+          <div className="form-modal-panel" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="form-modal-close" onClick={() => setEditing(false)} aria-label="Close">
+              &times;
+            </button>
             <JobDraftForm draft={job} onSave={handleSaveEdit} onDiscard={() => setEditing(false)} />
           </div>
         </div>
