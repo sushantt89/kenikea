@@ -100,7 +100,7 @@ function formatForExport(job) {
       : "",
     "Duration (min)": job.durationMinutes ?? "",
     "IKEA payout ($)": job.chargesTotal ?? "",
-    "Admin pay ($)": adminPay ?? "",
+    "Proposed worker payout ($)": adminPay ?? "",
     "Worker payout total ($)": assignedWorkers.length ? totalPayout : "",
     "Profit ($)": adminPay != null ? adminPay - totalPayout : "",
     "Customer name": job.customer?.name || "",

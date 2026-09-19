@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { WORK_AREA_COLOR_IDS, timezoneForWorkArea } from "../utils/workAreas.js";
+import { formatAssignedTitle } from "../utils/jobTitle.js";
 
 /**
  * Adds an assignment to the team's Google Calendar. This uses a single
@@ -265,17 +266,19 @@ export async function createAssignmentEvent(job, team, options = {}) {
   // as" the same real time everyone would expect for that job's location.
   const timeZone = timezoneForWorkArea(effectiveWorkArea);
 
-  // Prefix the event title with whoever is actually invited to THIS event
+  // Lead the event title with whoever is actually invited to THIS event
   // (not always the full team - a personal, single-worker event should only
-  // show that one worker's name, not the whole team's), joined with "+" for
-  // more than one, so a shared calendar reads "Ana + Ben - Job: ..." at a
-  // glance without opening the event. Falls back to no prefix if somehow
-  // none of the invitees have a name.
-  const namePrefix = invitable
-    .map((w) => w.name)
-    .filter(Boolean)
-    .join(" + ");
-  const summary = namePrefix ? `${namePrefix} - Job: ${job.title}` : `Job: ${job.title}`;
+  // show that one worker's name, not the whole team's), and move the
+  // scraped "(Job <id>)" tag (see utils/jobTitle.js) up next to their
+  // name(s) too, so a shared calendar reads "Ana + Ben (695676) - Attend,
+  // set up..." at a glance without opening the event - matching the same
+  // format the Jobs list uses (see client/src/components/JobCard.jsx).
+  // Falls back to the plain title if somehow none of the invitees have a
+  // name.
+  const summary = formatAssignedTitle(
+    job.title,
+    invitable.map((w) => w.name)
+  );
 
   try {
     const calendar = getClient();

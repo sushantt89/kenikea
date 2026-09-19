@@ -34,8 +34,6 @@ export default function Home() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [url, setUrl] = useState("");
-  const [authHeader, setAuthHeader] = useState("");
-  const [showAuthHeader, setShowAuthHeader] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState("");
   const [draft, setDraft] = useState(null);
@@ -49,7 +47,7 @@ export default function Home() {
     }
     setScraping(true);
     try {
-      const result = await scrapeJobLink(url.trim(), authHeader.trim() || undefined);
+      const result = await scrapeJobLink(url.trim());
       setDraft(result);
     } catch (err) {
       setScrapeError(err.message);
@@ -62,7 +60,6 @@ export default function Home() {
     await createJob(form);
     setDraft(null);
     setUrl("");
-    setAuthHeader("");
     // navigate() below unmounts this page immediately, so a toast (which
     // lives above the router - see ToastContext.jsx) is what actually gets
     // seen, not the old inline "Job saved" banner that used to render here
@@ -92,25 +89,6 @@ export default function Home() {
               required
             />
           </label>
-          <p className="muted small">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => setShowAuthHeader((s) => !s)}
-            >
-              {showAuthHeader ? "Hide" : "The site needs an Authorization header instead?"}
-            </button>
-          </p>
-          {showAuthHeader && (
-            <label>
-              Authorization header value (optional)
-              <input
-                placeholder="Bearer eyJhbGciOi..."
-                value={authHeader}
-                onChange={(e) => setAuthHeader(e.target.value)}
-              />
-            </label>
-          )}
           {scrapeError && <div className="form-error">{scrapeError}</div>}
           <div className="form-actions">
             <button className="btn btn-primary" type="submit" disabled={scraping}>

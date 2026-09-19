@@ -10,8 +10,7 @@
  *
  * The link the user pastes may already contain an access token as a query
  * parameter (e.g. https://example.com/jobs/123?token=abc) - that is fetched
- * as-is, no special handling needed. If a site instead expects the token as
- * an Authorization header, pass it via the optional `authHeader` argument.
+ * as-is, no special handling needed.
  *
  * BEEHIIVE LOGIN LINKS ARE DIFFERENT, AND NEED A REAL BROWSER. A link like
  * https://auth.beehiive.com/login?token=... looks like it should redeem the
@@ -79,7 +78,6 @@ const DESKTOP_CLIENT_HINTS = {
  *
  * @param {string} url
  * @param {object} [opts]
- * @param {string} [opts.authHeader] - sent as a real Authorization header on every request the browser makes
  * @param {RegExp} [opts.waitForUrlPattern] - if given, wait for navigation to a URL matching this before reading the page
  * @param {number} [opts.navTimeoutMs]
  * @param {number} [opts.redirectTimeoutMs]
@@ -87,7 +85,7 @@ const DESKTOP_CLIENT_HINTS = {
  */
 async function fetchViaBrowser(
   url,
-  { authHeader, waitForUrlPattern, navTimeoutMs = BROWSER_NAV_TIMEOUT_MS, redirectTimeoutMs = BROWSER_REDIRECT_TIMEOUT_MS } = {}
+  { waitForUrlPattern, navTimeoutMs = BROWSER_NAV_TIMEOUT_MS, redirectTimeoutMs = BROWSER_REDIRECT_TIMEOUT_MS } = {}
 ) {
   let chromium;
   try {
@@ -114,7 +112,6 @@ async function fetchViaBrowser(
       userAgent: DESKTOP_UA,
       extraHTTPHeaders: {
         ...DESKTOP_CLIENT_HINTS,
-        ...(authHeader ? { Authorization: authHeader } : {}),
       },
     });
     const page = await context.newPage();
@@ -320,9 +317,8 @@ function clamp(n, min, max) {
 /**
  * Fetch a job posting and pull out a best-guess draft.
  * @param {string} url - full URL, may already include an access token as a query param
- * @param {string} [authHeader] - optional raw Authorization header value, e.g. "Bearer xyz"
  */
-export async function scrapeJob(url, authHeader) {
+export async function scrapeJob(url) {
   let parsed;
   try {
     parsed = new URL(url);
@@ -344,7 +340,6 @@ export async function scrapeJob(url, authHeader) {
 
   if (isBeehiiveLoginLink) {
     const { html, finalUrl } = await fetchViaBrowser(url, {
-      authHeader,
       waitForUrlPattern: /jobs\.beehiive\.com/,
     });
 
@@ -385,7 +380,6 @@ export async function scrapeJob(url, authHeader) {
     "Sec-Fetch-Site": "none",
     "Sec-Fetch-User": "?1",
     "Upgrade-Insecure-Requests": "1",
-    ...(authHeader ? { Authorization: authHeader } : {}),
   };
 
   // Reuse whatever session was saved the last time a login link was

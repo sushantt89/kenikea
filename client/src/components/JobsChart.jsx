@@ -2,9 +2,9 @@
 // avoids pulling in a charting library for a handful of simple bars, and
 // keeps the bundle light. Colors follow a fixed categorical order (never
 // re-cycled per filter) matching the rest of the app's palette: blue for
-// "admin pay" figures, amber for "worker payout" figures, plus the app's
-// existing green/red for the profit delta - so the same quantity always
-// reads as the same color everywhere in the app.
+// "proposed worker payout" figures, amber for "worker payout" figures,
+// plus the app's existing green/red for the profit delta - so the same
+// quantity always reads as the same color everywhere in the app.
 
 const STATUS_COLORS = {
   Unassigned: "#9aa1ac",
@@ -55,9 +55,9 @@ export default function JobsChart({ jobs }) {
   }
   const maxStatusCount = Math.max(1, ...Object.values(statusCounts));
 
-  // Admin pay is a per-JOB figure (the business's own cut of that job's
-  // IKEA payout - see server/src/services/pay.js), so it's broken down by
-  // job here rather than by worker.
+  // "Proposed worker payout" (job.pay.adminPay - see
+  // server/src/services/pay.js) is a per-JOB figure, so it's broken down
+  // by job here rather than by worker.
   const pricedJobs = jobs.filter((j) => j.pay?.adminPay != null);
   const adminByJob = pricedJobs
     .map((j) => ({ label: j.title, value: j.pay.adminPay }))
@@ -102,7 +102,7 @@ export default function JobsChart({ jobs }) {
       {pricedJobs.length > 0 && (
         <div className="stat-tile-row">
           <StatTile label="IKEA payout" value={money(totalIkea)} />
-          <StatTile label="Admin pay" value={money(totalAdmin)} />
+          <StatTile label="Proposed worker payout" value={money(totalAdmin)} />
           <StatTile label="Worker payout" value={money(totalWorkerPayout)} />
           <StatTile
             label="Profit"
@@ -131,7 +131,7 @@ export default function JobsChart({ jobs }) {
 
         <div className="chart-block">
           <div className="chart-block-header">
-            <h3>Admin pay by job</h3>
+            <h3>Proposed worker payout by job</h3>
             <span className="muted small">{money(totalAdmin)} total</span>
           </div>
           {adminByJob.length === 0 ? (

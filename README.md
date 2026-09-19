@@ -244,9 +244,7 @@ work.
 
 1. Paste a job posting link and click **Fetch job details**. The backend
    fetches that exact URL - if the link already carries an access token as
-   a query parameter, it's sent through untouched. If a site instead needs
-   a bearer token as an `Authorization` header, click "The site needs an
-   Authorization header instead?" and paste it there.
+   a query parameter, it's sent through untouched.
 2. The scraper returns a best-guess draft: title, description, location,
    work area, difficulty (Easy/Medium/Difficult), priority, scheduled
    date/time, duration, and customer details where available. **Always
@@ -304,9 +302,7 @@ a source it wasn't built against.
 Two kinds of link are supported:
 
 - A token embedded directly in the URL (fetched exactly as pasted, no extra
-  setup), or a site that needs a bearer token as an `Authorization` header
-  instead (paste it into the "needs an Authorization header" field in the
-  UI).
+  setup).
 - **Beehiive login links specifically** (`https://auth.beehiive.com/login?token=...`).
   These aren't the job page itself - they're a one-time-ish login link that
   redeems the token and lands you on the real job page (e.g.
@@ -787,8 +783,8 @@ Weights live at the top of `assignment.js` if you want to tune them.
   will fall back to the generic heuristics, which are much rougher. For a
   new recurring source, add another dedicated parser branch the same way
   `draftFromBeehiiveJob` was added, or swap in an LLM call to pull
-  structured fields out of the fetched page text - `scrapeJob(url,
-  authHeader)` is already isolated so that's a self-contained change.
+  structured fields out of the fetched page text - `scrapeJob(url)` is
+  already isolated so that's a self-contained change.
 - **Per-worker Google accounts:** the current Calendar integration uses
   one business account and invites workers by email. If workers should
   instead see jobs on a calendar you don't control at all (e.g. they want

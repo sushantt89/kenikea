@@ -15,6 +15,7 @@ import { normalizeScore, scoreColor } from "../utils/scoreScale.js";
 import { requiredWorkerCount } from "../utils/team.js";
 import { WORK_AREA_SWATCH, timezoneForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
+import { formatAssignedTitle } from "../utils/jobTitle.js";
 import { useToast } from "../toast/ToastContext.jsx";
 import { FortnightCell, FortnightModal } from "./FortnightAvailability.jsx";
 
@@ -357,7 +358,7 @@ export default function JobCard({ job, onChange }) {
     <div className="card job-card">
       <div className="job-card-header">
         <div>
-          <h3>{job.title}</h3>
+          <h3>{formatAssignedTitle(job.title, assignedWorkers.map((a) => a.worker?.name))}</h3>
           <p className="muted small">
             {job.location || "No location"} &middot; difficulty {job.difficulty} &middot; priority {job.priority}
             {job.workArea && (
@@ -424,7 +425,7 @@ export default function JobCard({ job, onChange }) {
               <>
                 {" "}
                 &middot; less {Math.round((job.pay.gstRate ?? 0.1) * 100)}% GST = {money(job.pay.afterGst)}{" "}
-                &middot; admin pay <strong className="pay-amount">{money(adminPay)}</strong>
+                &middot; proposed worker payout <strong className="pay-amount">{money(adminPay)}</strong>
               </>
             )}
           </p>

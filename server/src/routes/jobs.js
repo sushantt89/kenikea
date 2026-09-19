@@ -37,13 +37,13 @@ router.get("/:id", async (req, res, next) => {
 // POST /api/jobs/scrape - fetch a link and return a best-guess draft.
 // Nothing is saved to the database here; the frontend lets the user review
 // and edit the draft before POSTing it to /api/jobs.
-// Body: { url: string, authHeader?: string }
+// Body: { url: string }
 router.post("/scrape", async (req, res, next) => {
   try {
-    const { url, authHeader } = req.body;
+    const { url } = req.body;
     if (!url) return res.status(400).json({ error: "url is required" });
 
-    const draft = await scrapeJob(url, authHeader);
+    const draft = await scrapeJob(url);
     res.json(draft);
   } catch (err) {
     if (err instanceof HttpError) {

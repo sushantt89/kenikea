@@ -88,8 +88,8 @@ export const rollOutForm = () => request("/workers/roll-out", { method: "POST" }
 // Jobs
 export const getJobs = () => request("/jobs");
 export const getJob = (id) => request(`/jobs/${id}`);
-export const scrapeJobLink = (url, authHeader) =>
-  request("/jobs/scrape", { method: "POST", body: JSON.stringify({ url, authHeader }) });
+export const scrapeJobLink = (url) =>
+  request("/jobs/scrape", { method: "POST", body: JSON.stringify({ url }) });
 export const createJob = (data) => request("/jobs", { method: "POST", body: JSON.stringify(data) });
 export const updateJob = (id, data) => request(`/jobs/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteJob = (id) => request(`/jobs/${id}`, { method: "DELETE" });

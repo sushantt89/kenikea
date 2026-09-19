@@ -10,6 +10,7 @@ import authRouter from "./routes/auth.js";
 import workersRouter from "./routes/workers.js";
 import jobsRouter from "./routes/jobs.js";
 import { clientDistPath, isSingleServiceDeployment } from "./utils/deployment.js";
+import { PRIVACY_POLICY_HTML } from "./utils/legalPages.js";
 
 const app = express();
 
@@ -35,6 +36,17 @@ app.use("/api/jobs", requireAuth, jobsRouter);
 
 // 404 for unknown API routes
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
+
+// Required by Google's OAuth consent screen once this app is published to
+// production (see README - "Switching the connected Google account") -
+// Google needs a real, publicly reachable privacy policy URL. Registered
+// here (before the SPA catch-all below) so it's served as plain HTML and
+// reachable at <your-domain>/privacy regardless of the client build. The
+// app's own root ("/") already works fine as the "homepage" URL Google
+// also asks for - no separate route needed for that one.
+app.get("/privacy", (req, res) => {
+  res.type("html").send(PRIVACY_POLICY_HTML);
+});
 
 // Serve the built React app (see README > Deploying it live) so this one
 // server can host both the API and the frontend - simplest single-service

@@ -283,6 +283,54 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(63, 94, 251, 0.15);
 }
 
+/* The one date/time picker in the app (JobDraftForm's "Scheduled start") -
+   built with react-datepicker instead of the native
+   <input type="datetime-local">, whose own browser/OS popup can't be
+   resized by CSS at all. The FIELD itself is left to look like every other
+   input above (the generic input/select/textarea rule already covers the
+   text box react-datepicker renders); these two wrapper rules just stop
+   react-datepicker's own wrapper divs from shrinking that field down to
+   its content width, and the rest enlarge the popup that opens on click. */
+.react-datepicker-wrapper,
+.react-datepicker__input-container {
+  display: block;
+  width: 100%;
+}
+
+.scheduled-start-calendar.react-datepicker {
+  font-size: 1.05rem;
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.scheduled-start-calendar .react-datepicker__month-container {
+  padding: 4px;
+}
+
+.scheduled-start-calendar .react-datepicker__current-month,
+.scheduled-start-calendar .react-datepicker-time__header {
+  font-size: 1.05rem;
+}
+
+.scheduled-start-calendar .react-datepicker__day-name,
+.scheduled-start-calendar .react-datepicker__day {
+  width: 2.4rem;
+  line-height: 2.4rem;
+  margin: 0.2rem;
+  font-size: 1rem;
+}
+
+.scheduled-start-calendar .react-datepicker__time-container,
+.scheduled-start-calendar .react-datepicker__time-container .react-datepicker__time .react-datepicker__time-box {
+  width: 120px;
+}
+
+.scheduled-start-calendar .react-datepicker__time-list-item {
+  font-size: 0.95rem;
+  padding: 8px 10px !important;
+  height: auto !important;
+}
+
 .checkbox-label {
   flex-direction: row !important;
   align-items: center;

@@ -1,29 +1,39 @@
 import { useState, useEffect } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { WORK_AREAS, timezoneForWorkArea } from "../utils/workAreas.js";
 import { zonedParts, zonedTimeToUtc } from "../utils/timezone.js";
 
-// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" and hands the same
-// format back. Rather than the browser's own local time (which would show
-// a different clock reading depending on where whoever's using the app
-// happens to be), these show/parse it as the wall-clock time in the JOB's
-// own work area - see timezoneForWorkArea() - so "7:00am" here always means
-// 7:00am at the job's actual location, however this page is being viewed.
-function toDatetimeLocal(iso, timeZone) {
-  if (!iso) return "";
+// react-datepicker works with real JS Date objects rather than the native
+// datetime-local input's plain string, but a Date has no timezone of its
+// own - it's just an instant, and reading it back via its LOCAL getters
+// (getFullYear/getHours/etc, which is how react-datepicker itself displays
+// and reports a value) depends on whatever timezone the browser happens to
+// be in. So exactly like the old string-based helpers below used to, these
+// treat the Date purely as a carrier for the JOB's own wall-clock
+// Y/M/D/H/M numbers - built with `new Date(y, m, d, h, min)` (never
+// Date.UTC) so react-datepicker's local getters come back with exactly
+// those numbers regardless of the viewer's real timezone. "7:00am" here
+// always means 7:00am at the job's actual location - see
+// timezoneForWorkArea() - however this page is being viewed.
+function toPickerDate(iso, timeZone) {
+  if (!iso) return null;
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
+  if (Number.isNaN(d.getTime())) return null;
   const { year, month, day, hour, minute } = zonedParts(d, timeZone);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}`;
+  return new Date(year, month - 1, day, hour, minute);
 }
 
-function fromDatetimeLocal(value, timeZone) {
-  if (!value) return null;
-  const [datePart, timePart] = value.split("T");
-  if (!datePart || !timePart) return null;
-  const [year, month, day] = datePart.split("-").map(Number);
-  const [hour, minute] = timePart.split(":").map(Number);
-  const d = zonedTimeToUtc(year, month - 1, day, hour, minute, timeZone);
+function fromPickerDate(date, timeZone) {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  const d = zonedTimeToUtc(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+    timeZone
+  );
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
@@ -164,10 +174,17 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
       <div className="form-row">
         <label>
           Scheduled start (optional - {form.workArea ? `${form.workArea} local time` : "default local time - set a work area above for the exact zone"}, used for the calendar invite)
-          <input
-            type="datetime-local"
-            value={toDatetimeLocal(form.scheduledStart, timeZone)}
-            onChange={(e) => update("scheduledStart", fromDatetimeLocal(e.target.value, timeZone))}
+          <DatePicker
+            selected={toPickerDate(form.scheduledStart, timeZone)}
+            onChange={(date) => update("scheduledStart", fromPickerDate(date, timeZone))}
+            showTimeSelect
+            timeIntervals={15}
+            dateFormat="EEE d MMM yyyy, h:mm aa"
+            placeholderText="Not set"
+            isClearable
+            autoComplete="off"
+            wrapperClassName="scheduled-start-wrapper"
+            calendarClassName="scheduled-start-calendar"
           />
         </label>
         <label>
@@ -214,7 +231,7 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
           />
         </label>
         <div className="pay-preview">
-          <span className="muted small">Admin pay preview (after 10% GST, 75% share)</span>
+          <span className="muted small">Proposed worker payout preview (after 10% GST, 75% share)</span>
           <strong>{formatAdminPayPreview(form.chargesTotal)}</strong>
         </div>
       </div>

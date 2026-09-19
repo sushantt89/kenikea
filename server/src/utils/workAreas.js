@@ -11,10 +11,10 @@
  *
  * Google Calendar event colors are a fixed built-in palette identified by
  * numeric "colorId" - there's no way to set an arbitrary hex color on an
- * event, only one of Google's 11 presets. The mapping below was chosen to
- * match the business's requested colors as closely as that palette allows:
- *   2 = Sage (green), 5 = Banana (yellow), 3 = Grape (purple),
- *   6 = Tangerine (orange), 9 = Blueberry (blue)
+ * event, only one of Google's 11 presets. The mapping below is the
+ * business's own requested color per area, using Google Calendar's own
+ * names for each preset:
+ *   10 = Basil, 5 = Banana, 3 = Grape, 6 = Tangerine, 7 = Peacock
  */
 
 export const WORK_AREAS = ["Adelaide", "Perth", "Brisbane", "NSW", "Auckland"];
@@ -49,11 +49,11 @@ export function timezoneForWorkArea(area) {
 }
 
 export const WORK_AREA_COLOR_IDS = {
-  Adelaide: "2", // Sage / green
-  Perth: "5", // Banana / yellow
-  Brisbane: "3", // Grape / purple
-  NSW: "6", // Tangerine / orange
-  Auckland: "9", // Blueberry / blue
+  Adelaide: "10", // Basil
+  Perth: "5", // Banana
+  Brisbane: "3", // Grape
+  NSW: "6", // Tangerine
+  Auckland: "7", // Peacock
 };
 
 // Keyword guesses used to auto-tag a scraped job's area from its address/
