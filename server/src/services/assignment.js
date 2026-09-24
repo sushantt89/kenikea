@@ -1,7 +1,7 @@
 import { scoreLocation, locationsMatch } from "../utils/distance.js";
 import { timezoneForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
-import { checkFortnightAvailability } from "./fortnightAvailability.js";
+import { checkFortnightAvailability, withParsedAvailability } from "./fortnightAvailability.js";
 
 /**
  * The assignment engine, in the order the business rules were specified:
@@ -269,7 +269,7 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
       // Included so the "Preview candidates" ranking table can show the
       // same click-to-view Availability popup as the Workers page,
       // without a second fetch per worker (see FortnightAvailability.jsx).
-      formAvailability: worker.formAvailability,
+      formAvailability: withParsedAvailability(worker.formAvailability),
       formAvailabilitySyncedAt: worker.formAvailabilitySyncedAt,
       total: Math.round(total * 10) / 10,
       breakdown: {

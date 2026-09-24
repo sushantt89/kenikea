@@ -31,3 +31,33 @@ export const WORK_AREA_SWATCH = {
   NSW: "#d5791f", // orange
   Auckland: "#3457d5", // blue
 };
+
+// Keep in sync with server/src/utils/workAreas.js - which country/currency
+// each work area's money is actually in, so the Jobs page/JobsChart never
+// silently blend a New Zealand job's dollars into an Australian total, and
+// label NZD figures as such instead of a bare "$" that implies AUD.
+export const WORK_AREA_COUNTRY = {
+  Adelaide: "Australia",
+  Perth: "Australia",
+  Brisbane: "Australia",
+  NSW: "Australia",
+  Auckland: "New Zealand",
+};
+
+export const WORK_AREA_CURRENCY = {
+  Adelaide: "AUD",
+  Perth: "AUD",
+  Brisbane: "AUD",
+  NSW: "AUD",
+  Auckland: "NZD",
+};
+
+export const CURRENCY_SYMBOL = { AUD: "A$", NZD: "NZ$" };
+
+export function countryForWorkArea(area) {
+  return WORK_AREA_COUNTRY[area] || "Australia";
+}
+
+export function currencyForWorkArea(area) {
+  return WORK_AREA_CURRENCY[area] || "AUD";
+}

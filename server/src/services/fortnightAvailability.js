@@ -9,21 +9,34 @@ import { timezoneForWorkArea } from "../utils/workAreas.js";
  * the old plain on/off `Worker.availability` checkbox, which is no longer
  * shown in the UI at all (see WorkerForm.jsx).
  *
- * This is only ever needed for the ORIGINAL, hand-made form's free-text
- * answers (read via the Sheets-based fallback in availabilitySync.js). A
- * form this app creates itself asks for Start/End time with Google's own
- * native time-of-day picker instead (see formManager.js) - those answers
- * always carry an explicit, unambiguous 24-hour time, so none of the
- * guesswork below ever applies to them.
+ * Used for BOTH ways a worker's answer reaches this app: the ORIGINAL,
+ * hand-made form's answers (read via the Sheets-based fallback in
+ * availabilitySync.js) and the form this app creates itself each fortnight
+ * (see formManager.js) - both ask the same free-text "8-5" style question
+ * per day, so both need the same guesswork below.
  *
  * The trickiest part here is a bare-number range with no am/pm given, e.g.
- * "8-5" or "8-11" - there's no fixed cut-off hour anymore (the business
- * runs a full 24-hour day, not just until 5pm), so the only sensible rule
- * left is: a bare end hour is read as PM unless that would put it before
- * the start time, in which case it's read as AM instead - i.e. "8-5" is
- * 8am-5pm (5am would be before 8am), and "8-11" is now read as 8am-11pm
- * (11am and 11pm are both after 8am, so PM wins). See
- * resolveAmbiguousEndMinutes() below.
+ * "8-5" or "8-11". The business only ever schedules jobs from 8am to 6pm,
+ * which actually removes almost all the ambiguity: within that window,
+ * every bare hour number has exactly one sensible reading - 8, 9, 10 and
+ * 11 can only mean morning (the business never starts before 8am), 12 can
+ * only mean noon, and 1 through 6 can only mean afternoon (the business
+ * never runs past 6pm) - see resolveBareHour() below. So "8-11" is 8am-
+ * 11am (not 11pm - that would be well past closing), and "1-6" is 1pm-6pm
+ * (not 1am - that would be well before opening). A bare "7" has no valid
+ * reading either way (7am is before opening, 7pm is after closing) and, if
+ * either side of a range comes out that way, or the two readings don't
+ * form a real start-before-end window once resolved (e.g. "5-9" - 5 can
+ * only be 5pm and 9 can only be 9am, and 9am isn't after 5pm), the whole
+ * answer is treated as unparseable rather than guessed at - see the
+ * "unknown" case below.
+ *
+ * None of the parsing in this function is timezone-aware by itself - it
+ * just turns "8-11" into "8:00-11:00" as bare hour-of-day numbers. The
+ * WORKER's own work area (see the "Work area" dropdown in formManager.js,
+ * written to Worker.workArea by availabilitySync.js) is what says which
+ * real timezone those numbers are in - see checkFortnightAvailability()
+ * below, which is the one place that actually attaches a timezone to them.
  */
 
 // Phrases meaning "not available at all that day" - matched against the
@@ -49,21 +62,17 @@ function to24Hour(hour12, isPM) {
 }
 
 /**
- * Resolves a bare (no am/pm stated) end hour against the already-resolved
- * start time: picks whichever of the AM/PM readings (a) isn't earlier than
- * the start time and (b) doesn't run past the 5pm cap, preferring PM when
- * both qualify (an afternoon finish - "8-5", "9-3" - is by far the common
- * case for a work day). Falls back to the only reading that qualifies when
- * just one does (e.g. "8-11" -> 11am, since 11pm blows the cap). Returns
- * null when NEITHER reading makes sense (a contradictory range like
- * "10-9") so the caller can fail open rather than guess.
+ * The one sensible 24-hour reading of a BARE hour number (no am/pm stated),
+ * given the business only ever schedules 8am-6pm - see the file header for
+ * the reasoning. Returns null for "7", the one number that's genuinely
+ * outside the business day either way (7am/7pm), so the caller can fail
+ * open rather than guess.
  */
-function resolveAmbiguousEndMinutes(endHour12, endMinute, startTotalMinutes) {
-  const pmMinutes = to24Hour(endHour12, true) * 60 + endMinute;
-  const amMinutes = to24Hour(endHour12, false) * 60 + endMinute;
-  if (pmMinutes >= startTotalMinutes) return pmMinutes;
-  if (amMinutes >= startTotalMinutes) return amMinutes;
-  return null; // neither reading is after the start time - a contradictory range like "10-9"
+function resolveBareHour(hour12) {
+  if (hour12 >= 8 && hour12 <= 11) return hour12; // 8-11 -> 8:00-11:00 (am)
+  if (hour12 === 12) return 12; // 12 -> 12:00 (noon)
+  if (hour12 >= 1 && hour12 <= 6) return hour12 + 12; // 1-6 -> 13:00-18:00 (pm)
+  return null;
 }
 
 /**
@@ -102,21 +111,67 @@ export function parseAvailabilityText(rawText) {
     return { kind: "unknown" };
   }
 
-  // A work day always starts in the morning unless the worker said
-  // otherwise - only an explicit "pm" on the start side overrides that.
-  const startTotalMinutes = to24Hour(startHour12, startMarker === "p") * 60 + startMinute;
-
-  let endTotalMinutes;
-  if (endMarker) {
-    endTotalMinutes = to24Hour(endHour12, endMarker === "p") * 60 + endMinute;
+  // An explicit am/pm on either side is always honored as stated; a bare
+  // side falls back to resolveBareHour()'s business-hours reading (and
+  // "unknown" if that comes back null, i.e. a bare "7").
+  let startHour24;
+  if (startMarker) {
+    startHour24 = to24Hour(startHour12, startMarker === "p");
   } else {
-    endTotalMinutes = resolveAmbiguousEndMinutes(endHour12, endMinute, startTotalMinutes);
-    if (endTotalMinutes == null) return { kind: "unknown" };
+    startHour24 = resolveBareHour(startHour12);
+    if (startHour24 == null) return { kind: "unknown" };
   }
+  const startTotalMinutes = startHour24 * 60 + startMinute;
+
+  let endHour24;
+  if (endMarker) {
+    endHour24 = to24Hour(endHour12, endMarker === "p");
+  } else {
+    endHour24 = resolveBareHour(endHour12);
+    if (endHour24 == null) return { kind: "unknown" };
+  }
+  const endTotalMinutes = endHour24 * 60 + endMinute;
 
   if (endTotalMinutes <= startTotalMinutes) return { kind: "unknown" };
 
   return { kind: "window", startMinutes: startTotalMinutes, endMinutes: endTotalMinutes };
+}
+
+/**
+ * A human-friendly interpretation of one day's raw free-text answer, e.g.
+ * "8-5" -> "8am-5pm", "Not available" -> "Not available", "8-9" -> "8am-9am"
+ * (see the file header for why that's morning, not evening). Returns null
+ * when the answer couldn't be confidently parsed (parseAvailabilityText's
+ * "unknown" case) - callers show the raw text on its own then, and can flag
+ * it for the admin to ask the worker to clarify with an explicit am/pm.
+ * @param {string} rawText
+ * @returns {string | null}
+ */
+export function describeAvailabilityText(rawText) {
+  const parsed = parseAvailabilityText(rawText);
+  if (parsed.kind === "unavailable") return "Not available";
+  if (parsed.kind === "all-day") return "Available all day";
+  if (parsed.kind === "window") return `${formatMinutes(parsed.startMinutes)}-${formatMinutes(parsed.endMinutes)}`;
+  return null;
+}
+
+/**
+ * Maps a Worker.formAvailability array (real Mongoose subdocs or plain
+ * [{date, text}] objects, e.g. from a .lean() query) to plain {date, text,
+ * parsed} objects, `parsed` being describeAvailabilityText(text) above.
+ * Shared by every place that sends formAvailability to the client (see
+ * routes/workers.js and services/assignment.js's rankCandidates), so the
+ * "Click to see" popup (FortnightAvailability.jsx) can show the resolved
+ * am/pm reading next to whatever the worker actually typed, instead of
+ * making the admin work it out by eye.
+ * @param {{date: Date|string, text: string}[]} entries
+ */
+export function withParsedAvailability(entries) {
+  return (entries || []).map((e) => ({
+    date: e.date,
+    text: e.text,
+    parsed: describeAvailabilityText(e.text),
+  }));
 }
 
 function formatMinutes(total) {
@@ -143,8 +198,20 @@ function formatMinutes(total) {
  * treated as evidence of a conflict. A human can still see the raw text
  * for any day via the Availability column on the Workers page.
  *
- * @param {{formAvailability?: {date: Date|string, text: string}[]}} worker
- * @param {{scheduledStart?: Date|string, durationMinutes?: number, workArea?: string}} job
+ * The job's scheduled time and the worker's day-by-day text answer are
+ * compared in the WORKER's own work area's timezone, not the job's -
+ * Worker.workArea is what the "Work area" dropdown on the fortnightly form
+ * writes (see availabilitySync.js), so a worker who picked NSW and wrote
+ * "8-11" means 8-11am Sydney time, regardless of which area the job itself
+ * is in. In practice these almost always agree anyway, since
+ * services/assignment.js hard-excludes a candidate whose workArea doesn't
+ * match the job's - but the comparison itself is scoped to the worker on
+ * purpose, since it's THEIR answer being interpreted. Falls back to
+ * DEFAULT_TIMEZONE (see utils/workAreas.js) when the worker has no
+ * workArea set yet, same as every other work-area lookup in this app.
+ *
+ * @param {{formAvailability?: {date: Date|string, text: string}[], workArea?: string}} worker
+ * @param {{scheduledStart?: Date|string, durationMinutes?: number}} job
  * @returns {{ok: true} | {ok: false, reason: string}}
  */
 export function checkFortnightAvailability(worker, job) {
@@ -152,7 +219,7 @@ export function checkFortnightAvailability(worker, job) {
   const start = new Date(job.scheduledStart);
   if (Number.isNaN(start.getTime())) return { ok: true };
 
-  const timeZone = timezoneForWorkArea(job.workArea);
+  const timeZone = timezoneForWorkArea(worker?.workArea);
   const zoned = zonedParts(start, timeZone);
 
   // Matched by UTC calendar-DATE only (year/month/day), not by exact

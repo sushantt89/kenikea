@@ -138,7 +138,14 @@ export function FortnightModal({ worker, onClose, onSaved }) {
             {entries.map((e) => (
               <li key={e.date}>
                 <span className="fortnight-modal-date">{formatDayShort(e.date)}</span>
-                <span className="fortnight-modal-text">{e.text}</span>
+                <span className="fortnight-modal-text">
+                  {e.text}
+                  {e.parsed && e.parsed.trim().toLowerCase() !== e.text.trim().toLowerCase() ? (
+                    <span className="fortnight-modal-parsed"> ({e.parsed})</span>
+                  ) : !e.parsed ? (
+                    <span className="fortnight-modal-parsed fortnight-modal-unclear"> (unclear - ask for am/pm)</span>
+                  ) : null}
+                </span>
               </li>
             ))}
           </ul>

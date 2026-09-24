@@ -668,6 +668,24 @@ textarea:focus {
   color: var(--muted);
 }
 
+/* The resolved am/pm reading shown next to the raw text (see
+   describeAvailabilityText/withParsedAvailability in
+   services/fortnightAvailability.js) - dimmer than the raw text since it's
+   just a restatement of it, except when it's flagged unclear (a bare range
+   that can't be read either way inside the 8am-6pm business day), which
+   gets a warning color so it stands out as needing a follow-up. */
+.fortnight-modal-parsed {
+  color: var(--muted);
+  opacity: 0.75;
+  font-size: 0.8em;
+}
+
+.fortnight-modal-unclear {
+  color: var(--danger, #c0392b);
+  opacity: 1;
+  font-weight: 600;
+}
+
 /* Edit mode: each row's text becomes an input instead of plain text, sized
    down to fit comfortably inside the popup (the default global input
    padding/font-size is a bit large for a dense 14-row list). */

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { WORK_AREAS, timezoneForWorkArea } from "../utils/workAreas.js";
+import { WORK_AREAS, timezoneForWorkArea, currencyForWorkArea, CURRENCY_SYMBOL } from "../utils/workAreas.js";
 import { zonedParts, zonedTimeToUtc } from "../utils/timezone.js";
 
 // react-datepicker works with real JS Date objects rather than the native
@@ -41,13 +41,16 @@ function fromPickerDate(date, timeZone) {
 // preview as the user types - the real, authoritative number is always
 // computed server-side on save. This is the ADMIN/business's own cut, not
 // what any worker gets paid - see JobCard.jsx for the per-worker payout,
-// which is entered by hand once a worker is actually assigned.
-function formatAdminPayPreview(chargesTotal) {
+// which is entered by hand once a worker is actually assigned. `symbol`
+// is whichever currency the job's own work area is in (see
+// currencyForWorkArea in utils/workAreas.js) - the same number, just
+// labeled "$" (AUD) or "NZ$" so it's never mistaken for the other.
+function formatAdminPayPreview(chargesTotal, symbol) {
   const total = Number(chargesTotal);
   if (!Number.isFinite(total) || total <= 0) return "-";
   const afterGst = total * 0.9;
   const adminPay = afterGst * 0.75;
-  return `$${adminPay.toFixed(2)} (of $${total.toFixed(2)} - $${afterGst.toFixed(2)} after GST)`;
+  return `${symbol}${adminPay.toFixed(2)} (of ${symbol}${total.toFixed(2)} - ${symbol}${afterGst.toFixed(2)} after GST)`;
 }
 
 export default function JobDraftForm({ draft, onSave, onDiscard }) {
@@ -221,7 +224,11 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
 
       <div className="form-row">
         <label>
-          IKEA payout / charges total ($AUD, optional)
+          {/* Currency follows the work area picked above - Auckland is
+              NZD, every Australian area is AUD (see currencyForWorkArea).
+              Defaults to AUD when no work area is set yet, same as the
+              rest of the app. */}
+          IKEA payout / charges total ({currencyForWorkArea(form.workArea)}, optional)
           <input
             type="number"
             step="0.01"
@@ -232,7 +239,9 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
         </label>
         <div className="pay-preview">
           <span className="muted small">Proposed worker payout preview (after 10% GST, 75% share)</span>
-          <strong>{formatAdminPayPreview(form.chargesTotal)}</strong>
+          <strong>
+            {formatAdminPayPreview(form.chargesTotal, CURRENCY_SYMBOL[currencyForWorkArea(form.workArea)] || "$")}
+          </strong>
         </div>
       </div>
 

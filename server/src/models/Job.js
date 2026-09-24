@@ -90,9 +90,12 @@ const JobSchema = new Schema(
       phone: { type: String, default: "" },
       email: { type: String, default: "" },
     },
-    // The IKEA payout to the business for this job, in AUD - scraped when
-    // available (see scraper.js) or entered by hand. Drives the `pay`
-    // breakdown below; see services/pay.js for the formula.
+    // The IKEA payout to the business for this job, in whatever currency
+    // the job's OWN work area uses - AUD for every Australian area, NZD
+    // for Auckland (see utils/workAreas.js's currencyForWorkArea(), which
+    // every reader of this field should use rather than assuming AUD).
+    // Scraped when available (see scraper.js) or entered by hand. Drives
+    // the `pay` breakdown below; see services/pay.js for the formula.
     chargesTotal: { type: Number, default: null },
     // Snapshot of the ADMIN'S pay calculation at the rates that applied
     // when it was last computed (on save) - i.e. what the business itself

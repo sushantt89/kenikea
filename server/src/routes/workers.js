@@ -7,6 +7,7 @@ import { syncAvailabilityFromForm } from "../services/availabilitySync.js";
 import { getOrCreateRollout } from "../models/FormRollout.js";
 import { sendEmail } from "../services/mailer.js";
 import { createFortnightForm, isConfigured as formCreationConfigured } from "../services/formManager.js";
+import { withParsedAvailability } from "../services/fortnightAvailability.js";
 import { WORK_AREAS } from "../utils/workAreas.js";
 
 const router = Router();
@@ -27,6 +28,7 @@ router.get("/", async (req, res, next) => {
 
     const withCounts = workers.map((w) => ({
       ...w,
+      formAvailability: withParsedAvailability(w.formAvailability),
       activeJobCount: countByWorker.get(String(w._id)) || 0,
     }));
 
@@ -163,7 +165,9 @@ router.get("/:id", async (req, res, next) => {
   try {
     const worker = await Worker.findById(req.params.id);
     if (!worker) return res.status(404).json({ error: "Worker not found" });
-    res.json(worker);
+    const json = worker.toObject();
+    json.formAvailability = withParsedAvailability(json.formAvailability);
+    res.json(json);
   } catch (err) {
     next(err);
   }
@@ -225,7 +229,10 @@ router.put("/:id/availability", async (req, res, next) => {
     worker.formAvailability = cleaned;
     await worker.save();
 
-    res.json({ formAvailability: worker.formAvailability, formAvailabilitySyncedAt: worker.formAvailabilitySyncedAt });
+    res.json({
+      formAvailability: withParsedAvailability(worker.formAvailability),
+      formAvailabilitySyncedAt: worker.formAvailabilitySyncedAt,
+    });
   } catch (err) {
     next(err);
   }

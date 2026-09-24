@@ -27,9 +27,18 @@ const WorkerSchema = new Schema(
     // engine will use real distance instead of text matching.
     lat: { type: Number, default: null },
     lng: { type: Number, default: null },
-    // Which of the business's work areas this worker is based in - purely
-    // informational/organisational (unlike Job.workArea, this does NOT
-    // drive the calendar color - see utils/workAreas.js for why).
+    // Which of the business's work areas this worker is based in. Doesn't
+    // drive the calendar color the way Job.workArea does (see
+    // utils/workAreas.js for why), but IS used for one real thing: it's
+    // the timezone fortnightAvailability.js's checkFortnightAvailability()
+    // reads this worker's own day-by-day "8-11" style answers in (an NSW
+    // worker's "8-11" means Sydney time). Set by hand on the Workers page,
+    // but also kept in sync automatically: the fortnightly Google Form
+    // this app creates asks a matching "Work area" dropdown, and
+    // availabilitySync.js writes that answer straight in here on every
+    // sync (see that file's header comment) - the original hand-made form
+    // has no such question, so a worker who only answers that one keeps
+    // whatever was last set by hand.
     workArea: {
       type: String,
       enum: [...WORK_AREAS, null],

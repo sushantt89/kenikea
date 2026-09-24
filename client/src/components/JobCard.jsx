@@ -13,7 +13,7 @@ import {
 import JobDraftForm from "./JobDraftForm.jsx";
 import { normalizeScore, scoreColor } from "../utils/scoreScale.js";
 import { requiredWorkerCount } from "../utils/team.js";
-import { WORK_AREA_SWATCH, timezoneForWorkArea } from "../utils/workAreas.js";
+import { WORK_AREA_SWATCH, timezoneForWorkArea, currencyForWorkArea, CURRENCY_SYMBOL } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
 import { formatAssignedTitle } from "../utils/jobTitle.js";
 import { useToast } from "../toast/ToastContext.jsx";
@@ -54,8 +54,13 @@ function formatDateTime(iso, workArea) {
   return formatInZone(iso, timezoneForWorkArea(workArea));
 }
 
-function money(n) {
-  return `$${Number(n).toFixed(2)}`;
+// `currency` defaults to AUD (this app's original single-currency
+// assumption) but every call site in this file passes the job's own
+// currency (see currencyForWorkArea in utils/workAreas.js), so an Auckland
+// job's figures read as "NZ$..." instead of a bare "$" that implies AUD.
+function money(n, currency = "AUD") {
+  const symbol = CURRENCY_SYMBOL[currency] || "$";
+  return `${symbol}${Number(n).toFixed(2)}`;
 }
 
 // job.description is one flowing paragraph - short facts joined with ". "
@@ -120,7 +125,7 @@ function JobDescriptionView({ description }) {
 // in JobCard below for why); typing here just updates the draft value kept
 // in JobCard's state, and nothing is sent to the server until the ASSIGN
 // button is clicked.
-function AssignedWorkerRow({ assignment, value, disabled, onDraftChange, onRemove }) {
+function AssignedWorkerRow({ assignment, value, disabled, onDraftChange, onRemove, currencySymbol }) {
   const worker = assignment.worker || {};
 
   return (
@@ -130,7 +135,7 @@ function AssignedWorkerRow({ assignment, value, disabled, onDraftChange, onRemov
         {worker.location && <span className="muted small"> ({worker.location})</span>}
       </span>
       <label className="payout-input">
-        <span className="muted small">Payout $</span>
+        <span className="muted small">Payout {currencySymbol}</span>
         <input
           type="number"
           step="0.01"
@@ -344,6 +349,13 @@ export default function JobCard({ job, onChange }) {
   const totalPayout = assignedWorkers.reduce((sum, a) => sum + (Number(a.payout) || 0), 0);
   const anyPayoutSet = assignedWorkers.some((a) => a.payout != null);
   const profit = adminPay != null ? adminPay - totalPayout : null;
+  // This job's own currency - AUD for every Australian work area, NZD for
+  // Auckland (see utils/workAreas.js). Every dollar figure below is for
+  // THIS one job, so there's no cross-currency summing risk here (unlike
+  // JobsChart.jsx, which aggregates across many jobs and has to keep
+  // currencies separate) - just a display label.
+  const currency = currencyForWorkArea(job.workArea);
+  const currencySymbol = CURRENCY_SYMBOL[currency] || "$";
   // No calendar invite goes out until EVERY assigned worker has a payout
   // entered (see services/googleCalendar.js) - shown here as a persistent
   // note (not just the transient banner right after an action) so it's
@@ -406,6 +418,7 @@ export default function JobCard({ job, onChange }) {
                 disabled={job.status === "Completed" || busy}
                 onDraftChange={handleDraftChange}
                 onRemove={handleRemoveWorker}
+                currencySymbol={currencySymbol}
               />
             );
           })}
@@ -420,12 +433,12 @@ export default function JobCard({ job, onChange }) {
       {job.chargesTotal != null && (
         <div className="pay-block">
           <p className="pay-line">
-            IKEA payout <strong>{money(job.chargesTotal)}</strong>
+            IKEA payout <strong>{money(job.chargesTotal, currency)}</strong>
             {adminPay != null && (
               <>
                 {" "}
-                &middot; less {Math.round((job.pay.gstRate ?? 0.1) * 100)}% GST = {money(job.pay.afterGst)}{" "}
-                &middot; proposed worker payout <strong className="pay-amount">{money(adminPay)}</strong>
+                &middot; less {Math.round((job.pay.gstRate ?? 0.1) * 100)}% GST = {money(job.pay.afterGst, currency)}{" "}
+                &middot; proposed worker payout <strong className="pay-amount">{money(adminPay, currency)}</strong>
               </>
             )}
           </p>
@@ -433,14 +446,14 @@ export default function JobCard({ job, onChange }) {
             <p className="pay-line">
               Worker payout:{" "}
               {assignedWorkers
-                .map((a) => `${a.worker?.name || "?"} ${a.payout != null ? money(a.payout) : "-"}`)
+                .map((a) => `${a.worker?.name || "?"} ${a.payout != null ? money(a.payout, currency) : "-"}`)
                 .join(", ")}
-              {assignedWorkers.length > 1 && ` (total ${money(totalPayout)})`}
+              {assignedWorkers.length > 1 && ` (total ${money(totalPayout, currency)})`}
             </p>
           )}
           {adminPay != null && (
             <p className={`pay-line profit-line ${profit >= 0 ? "profit-positive" : "profit-negative"}`}>
-              Profit <strong>{money(profit)}</strong>
+              Profit <strong>{money(profit, currency)}</strong>
               {!anyPayoutSet && <span className="muted small"> (worker payout not entered yet)</span>}
             </p>
           )}

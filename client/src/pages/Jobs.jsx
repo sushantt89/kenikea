@@ -4,7 +4,7 @@ import JobCard from "../components/JobCard.jsx";
 import JobsChart from "../components/JobsChart.jsx";
 import { getJobs, getWorkers } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
-import { WORK_AREAS, timezoneForWorkArea } from "../utils/workAreas.js";
+import { WORK_AREAS, timezoneForWorkArea, countryForWorkArea, currencyForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
 
 const PERIODS = [
@@ -15,6 +15,14 @@ const PERIODS = [
 ];
 
 const STATUSES = ["Unassigned", "Assigned", "Completed"];
+
+// Coarser than the Work area filter below - lets you see "all of
+// Australia" (Adelaide + Perth + Brisbane + NSW) as one bucket against
+// Auckland/New Zealand, which the per-area filter alone can't do (picking
+// one Australian area at a time excludes the other three). See
+// utils/workAreas.js's countryForWorkArea() - derived from WORK_AREAS so
+// this never drifts out of sync with it.
+const COUNTRIES = [...new Set(WORK_AREAS.map(countryForWorkArea))];
 
 // The date a job "happened" on, for filtering purposes - its scheduled time
 // when known, otherwise falls back to when it was created (e.g. a job
@@ -92,6 +100,11 @@ function formatForExport(job) {
     Status: job.status,
     "Assigned worker(s)": assignedWorkers.map((a) => a.worker?.name).filter(Boolean).join(", "),
     "Work area": job.workArea || "",
+    // The job's own currency (AUD for every Australian area, NZD for
+    // Auckland - see utils/workAreas.js) - included so the money columns
+    // below aren't ambiguous once an export mixes jobs from both
+    // countries; every number in a given row is in THIS currency.
+    Currency: currencyForWorkArea(job.workArea),
     Location: job.location || "",
     Priority: job.priority,
     Difficulty: job.difficulty,
@@ -122,6 +135,7 @@ export default function Jobs() {
   const [workerFilter, setWorkerFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [workAreaFilter, setWorkAreaFilter] = useState("all");
+  const [countryFilter, setCountryFilter] = useState("all");
 
   // `loading` gates the very first render (a full-page "Loading jobs..."
   // placeholder while there's nothing to show yet). Every later reload -
@@ -176,9 +190,10 @@ export default function Jobs() {
       } else if (workAreaFilter !== "all") {
         if (job.workArea !== workAreaFilter) return false;
       }
+      if (countryFilter !== "all" && countryForWorkArea(job.workArea) !== countryFilter) return false;
       return true;
     });
-  }, [jobs, period, workerFilter, statusFilter, workAreaFilter, search]);
+  }, [jobs, period, workerFilter, statusFilter, workAreaFilter, countryFilter, search]);
 
   function handleExport() {
     const rows = filteredJobs.map(formatForExport);
@@ -250,6 +265,17 @@ export default function Jobs() {
             {WORK_AREAS.map((area) => (
               <option key={area} value={area}>
                 {area}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Country
+          <select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}>
+            <option value="all">All countries</option>
+            {COUNTRIES.map((country) => (
+              <option key={country} value={country}>
+                {country}
               </option>
             ))}
           </select>

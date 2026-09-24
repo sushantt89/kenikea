@@ -56,6 +56,48 @@ export const WORK_AREA_COLOR_IDS = {
   Auckland: "7", // Peacock
 };
 
+/**
+ * Which country/currency each work area's money is actually in - used
+ * wherever a job's IKEA payout, admin pay or profit is calculated or
+ * displayed (services/pay.js, routes/jobs.js, and the client's Jobs page +
+ * JobsChart), so a New Zealand job's dollars are never silently added
+ * straight into an Australian one's, and NZD figures are labeled as such
+ * rather than shown with a plain "$" that implies AUD. All four Australian
+ * areas use AUD; Auckland uses NZD.
+ */
+export const WORK_AREA_COUNTRY = {
+  Adelaide: "Australia",
+  Perth: "Australia",
+  Brisbane: "Australia",
+  NSW: "Australia",
+  Auckland: "New Zealand",
+};
+
+export const WORK_AREA_CURRENCY = {
+  Adelaide: "AUD",
+  Perth: "AUD",
+  Brisbane: "AUD",
+  NSW: "AUD",
+  Auckland: "NZD",
+};
+
+export const CURRENCY_SYMBOL = { AUD: "A$", NZD: "NZ$" };
+
+/**
+ * The country a work area is in, defaulting to Australia (the original,
+ * single-country assumption this app started with) for a job/worker with
+ * no work area set yet.
+ */
+export function countryForWorkArea(area) {
+  return WORK_AREA_COUNTRY[area] || "Australia";
+}
+
+/** The currency a work area's money is in - same default reasoning as
+ * countryForWorkArea() above. */
+export function currencyForWorkArea(area) {
+  return WORK_AREA_CURRENCY[area] || "AUD";
+}
+
 // Keyword guesses used to auto-tag a scraped job's area from its address/
 // description text - order matters (checked top to bottom, first match
 // wins), so put more specific/common tokens first if that ever changes.

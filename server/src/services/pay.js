@@ -2,8 +2,9 @@
  * Business (admin) pay calculation.
  *
  * The IKEA payout the business receives for a job (its `chargesTotal`, in
- * AUD) is not what the business itself keeps - two deductions are applied,
- * in this order:
+ * the job's own currency - AUD for every Australian work area, NZD for
+ * Auckland, see utils/workAreas.js's currencyForWorkArea()) is not what the
+ * business itself keeps - two deductions are applied, in this order:
  *
  *   1. GST (10%) is removed from the payout.
  *   2. The business/admin keeps a fixed share (75%) of what's left.
@@ -28,7 +29,14 @@ export const GST_RATE = 0.1; // 10%
 export const ADMIN_SHARE = 0.75; // admin/business keeps 75% of the post-GST amount
 
 /**
- * @param {number|string|null|undefined} chargesTotal - the IKEA payout to the business, in AUD
+ * @param {number|string|null|undefined} chargesTotal - the IKEA payout to
+ *   the business, in whatever currency the job's own work area uses (AUD
+ *   or NZD - see utils/workAreas.js). The percentages here (GST, admin
+ *   share) apply the same way regardless of which currency the number is
+ *   denominated in, so this function itself needs no currency awareness -
+ *   only the CALLER (routes/jobs.js, the client's Jobs page/JobsChart) has
+ *   to keep an AUD total and an NZD total separate rather than adding them
+ *   together.
  * @returns {{chargesTotal:number, gstRate:number, gstAmount:number, afterGst:number, adminShare:number, adminPay:number} | null}
  *   null when chargesTotal isn't a usable positive number - i.e. there's
  *   nothing to calculate yet (job has no price info scraped/entered).

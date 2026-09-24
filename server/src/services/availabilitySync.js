@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import Worker from "../models/Worker.js";
 import { listFormResponses } from "./formManager.js";
+import { WORK_AREAS } from "../utils/workAreas.js";
 
 /**
  * Pulls the team's fortnightly availability into each Worker document, so
@@ -24,6 +25,15 @@ import { listFormResponses } from "./formManager.js";
  * response to a Worker is always by email (case-insensitive); a response
  * from an email that isn't already a Worker in this app is reported back
  * as "unmatched" rather than silently ignored or auto-creating a worker.
+ *
+ * The form this app creates itself (not the original hand-made one) also
+ * asks a "Work area" dropdown question (see formManager.js) - THAT answer
+ * DOES get written straight into Worker.workArea (not just informational),
+ * since fortnightAvailability.js's checkFortnightAvailability() uses a
+ * worker's own workArea to know which timezone their day-by-day hours are
+ * in. The original hand-made form has no equivalent question, so a worker
+ * who only ever answers that one keeps whatever workArea was last set by
+ * hand on the Workers page.
  */
 
 let cachedSheetsClient = null;
@@ -72,6 +82,25 @@ function findColumnIndex(headerRow, matcher) {
   return headerRow.findIndex((h) => matcher(String(h || "").trim().toLowerCase()));
 }
 
+// True if `a` and `b` are the same UTC calendar day, regardless of
+// whatever time-of-day component either one carries. Matching this way
+// (rather than an exact getTime() equality) is what heals a real historical
+// bug: formManager.js's day dates used to pick up a stray, non-midnight
+// time-of-day component depending on the machine's local timezone (see
+// fortnightAvailability.js's checkFortnightAvailability comment for the
+// full story) - an exact-millisecond match would never find that old entry
+// again, leaving it sitting alongside a fresh one forever instead of being
+// replaced, which is exactly why the same day could show up twice in the
+// "Click to see" popup (see FortnightAvailability.jsx, which just renders
+// every entry in the array with no deduplication of its own).
+function sameCalendarDay(a, b) {
+  return (
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate()
+  );
+}
+
 /**
  * Applies one response's day-by-day answers to whichever Worker matches
  * `email` (case-insensitive), shared by both sync paths below. Mutates
@@ -82,9 +111,16 @@ function findColumnIndex(headerRow, matcher) {
  * @param {Set<string>} unmatchedEmails
  * @param {Map<string, object>} touchedWorkers
  * @param {string} email
- * @param {{date: Date, text: string}[]} dayAnswers
+ * @param {{date: Date, text: string}[]} dayAnswers - `text` empty/blank
+ *   means the worker submitted the form but left that day's (no longer
+ *   required) question blank - stored as "Not available" (see the loop
+ *   body below), not skipped
+ * @param {string} [workAreaAnswer] - the "Work area" dropdown answer, when
+ *   this response has one (see the file header) - only the app-created
+ *   form's sync path passes this; the original hand-made form has no such
+ *   question, so its sync leaves a worker's existing workArea untouched.
  */
-function applyAnswersToWorker(workerByEmail, unmatchedEmails, touchedWorkers, email, dayAnswers) {
+function applyAnswersToWorker(workerByEmail, unmatchedEmails, touchedWorkers, email, dayAnswers, workAreaAnswer) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   if (!normalizedEmail) return;
 
@@ -94,14 +130,33 @@ function applyAnswersToWorker(workerByEmail, unmatchedEmails, touchedWorkers, em
     return;
   }
 
+  // Keep it exact-match only against the fixed WORK_AREAS list - a
+  // dropdown answer should always be one of those five values, but this
+  // guards against a stray/blank answer ever writing garbage into
+  // Worker.workArea (which also drives Google Calendar's event color and
+  // the assignment engine's hard area match - see utils/workAreas.js and
+  // services/assignment.js).
+  if (workAreaAnswer && WORK_AREAS.includes(workAreaAnswer)) {
+    worker.workArea = workAreaAnswer;
+  }
+
   for (const { date, text } of dayAnswers) {
-    if (!text) continue;
-    const existing = worker.formAvailability.find((e) => e.date.getTime() === date.getTime());
-    if (existing) {
-      existing.text = text;
-    } else {
-      worker.formAvailability.push({ date, text });
-    }
+    // The day questions are no longer required (see formManager.js), so a
+    // blank answer means the worker actually submitted the form and just
+    // skipped that one day - treated here as an explicit "Not available"
+    // rather than "no answer" (which is what a genuinely MISSING day, from
+    // a worker who hasn't responded to this fortnight's form at all,
+    // still correctly falls open on - see checkFortnightAvailability()'s
+    // "no submitted answer for this day" case in fortnightAvailability.js,
+    // which only applies when there's no entry here at all).
+    const effectiveText = text || "Not available";
+    // Collapse EVERY entry for that calendar day (there can be more than
+    // one left over from the bug described above) down to just this one
+    // fresh answer, rather than only patching the text of a single exact
+    // match - this is what actually removes an existing duplicate instead
+    // of leaving it stranded next to the new entry.
+    worker.formAvailability = worker.formAvailability.filter((e) => !sameCalendarDay(new Date(e.date), date));
+    worker.formAvailability.push({ date, text: effectiveText });
   }
 
   // Keep it sorted by date, and only entries from roughly the last 3 weeks
@@ -134,29 +189,22 @@ async function syncFromFormsApi(rollout) {
   const answerText = (response, questionId) =>
     questionId ? response.answers?.[questionId]?.textAnswers?.answers?.[0]?.value?.trim() || "" : "";
 
-  // Each day is answered as two dropdowns (Start time / End time - see
-  // formManager.js's buildQuestionRequests), combined here into the same
-  // single free-text shape Worker.formAvailability has always stored
-  // ("8:00 AM - 5:00 PM" / "Not available") - both dropdown values always
-  // carry an explicit AM/PM, so fortnightAvailability.js's parser reads
-  // this combined string with zero ambiguity (unlike the ORIGINAL hand-made
-  // form's free-text answers, read via syncFromSheet below, where a bare
-  // "8-5" style answer needs guesswork).
-  const combineDayAnswer = (response, day) => {
-    const start = answerText(response, day.startQuestionId);
-    if (!start) return "";
-    if (start === "Not available") return "Not available";
-    const end = answerText(response, day.endQuestionId);
-    return end ? `${start} - ${end}` : start;
-  };
-
+  // Each day is now just one free-text question (see formManager.js's
+  // buildQuestionRequests) - read straight through, same as the ORIGINAL
+  // hand-made form's answers below in syncFromSheet. A bare "8-5" style
+  // answer with no am/pm stated gets resolved by
+  // fortnightAvailability.js's parseAvailabilityText() when it's actually
+  // used, not here - this just stores whatever the worker typed. The
+  // dropdown "Work area" answer, unlike the days, IS applied here (see
+  // applyAnswersToWorker) rather than left for later.
   for (const response of result.responses) {
     const email = answerText(response, questionMap.email);
+    const workArea = answerText(response, questionMap.workArea);
     const dayAnswers = (questionMap.days || []).map((d) => ({
       date: new Date(d.date),
-      text: combineDayAnswer(response, d),
+      text: answerText(response, d.questionId),
     }));
-    applyAnswersToWorker(workerByEmail, unmatchedEmails, touchedWorkers, email, dayAnswers);
+    applyAnswersToWorker(workerByEmail, unmatchedEmails, touchedWorkers, email, dayAnswers, workArea);
   }
 
   for (const worker of touchedWorkers.values()) {

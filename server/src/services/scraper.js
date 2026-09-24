@@ -564,10 +564,16 @@ function draftFromBeehiiveHtml(html, url) {
     : "";
   // Layered fallbacks for when the <address> tag itself isn't present (a
   // different Beehiive template, or the block missing entirely): try a
-  // Google Maps link next, then a generic Australian street-address pattern
-  // anywhere on the page, before finally giving up and leaving it blank for
-  // the user to fill in by hand (see the extraction.notes flag below).
-  const address = addressFromTag || guessAddressFromMapsLink(html) || guessAddressFromText(text);
+  // Google Maps link next, then the "Accept" page's own contact-block
+  // layout (see guessAddressFromAcceptBlock below), then a generic
+  // Australian street-address pattern anywhere on the page, before finally
+  // giving up and leaving it blank for the user to fill in by hand (see
+  // the extraction.notes flag below).
+  const address =
+    addressFromTag ||
+    guessAddressFromMapsLink(html) ||
+    guessAddressFromAcceptBlock(html, phoneMatch ? html.indexOf(phoneMatch[0]) : -1) ||
+    guessAddressFromText(text);
 
   const orderNumberMatch = html.match(/<b>OrderNumber<\/b>\s*([\s\S]*?)<\/p>/i);
   const orderNumber = orderNumberMatch ? stripHtml(orderNumberMatch[1]).trim() : "";
@@ -603,7 +609,11 @@ function draftFromBeehiiveHtml(html, url) {
   if (isSecureIt) difficulty = bumpTier(difficulty);
   if (products.length >= 6) difficulty = bumpTier(difficulty);
 
-  const totalMatch = text.match(/Total\s+([\d,]+\.\d{2})\s*AUD/i);
+  // Matches "Total 75.11 NZD" as well as "Total 36.05 AUD" - a job in
+  // Auckland (see utils/workAreas.js) is charged in NZD, and this used to
+  // only match the AUD suffix, so an Auckland job's charges total silently
+  // came back null every time (see the comment on Job.chargesTotal).
+  const totalMatch = text.match(/Total\s+([\d,]+\.\d{2})\s*(?:AUD|NZD)/i);
   const chargesTotal = totalMatch ? Number(totalMatch[1].replace(/,/g, "")) : null;
 
   const descriptionParts = [];
@@ -675,6 +685,34 @@ function guessAddressFromMapsLink(html) {
   } catch {
     return "";
   }
+}
+
+// The "Accept / Decline" page (a different Beehiive template from the main
+// job view - no <address> tag at all) puts the customer's street address
+// as plain text, in the SAME "Job site" <p> block as their name and tel:
+// link, right after an icon badge (e.g. <span title="on site">...</span>),
+// separated by <br> tags - e.g.:
+//   <a href="tel:+64...">...</a> <br> <span title="on site">...</span>
+//   Flat 2, 225 Ponsonby Road<br />Ponsonby<br />Auckland 1011 </p>
+// This is what was leaving `location` (and therefore workArea, since that's
+// guessed from the address first - see below) completely blank for any job
+// scraped from that page, even though the address is right there as text.
+// Scoped to start searching from the SAME tel: link position `phone` above
+// was read from (not just "the first <a href=tel: on the page"), for the
+// same false-positive reason findNearbyEmail() is scoped near it - a
+// whole-page search could just as easily latch onto an unrelated tel:/p>
+// block further down (e.g. the service center's own contact details).
+function guessAddressFromAcceptBlock(html, fromIndex) {
+  if (!html || fromIndex < 0) return "";
+  // 1500 chars is comfortably more than this block ever runs (name + tel
+  // link + badge + a few address lines), so this won't spill into an
+  // unrelated block further down the page.
+  const scoped = html.slice(fromIndex, fromIndex + 1500);
+  const m = scoped.match(
+    /href="tel:[^"]*"[^>]*>[\s\S]*?<\/a>\s*<br\s*\/?>\s*(?:<span[^>]*>[\s\S]*?<\/span>\s*)?([\s\S]*?)<\/p>/i
+  );
+  if (!m) return "";
+  return stripHtml(m[1].replace(/<br\s*\/?>/gi, ", ")).trim();
 }
 
 function parseCommitTime(html) {
