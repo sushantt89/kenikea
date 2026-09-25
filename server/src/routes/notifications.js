@@ -5,6 +5,23 @@ import { checkNewAvailabilitySubmissions } from "../services/availabilitySync.js
 
 const router = Router();
 
+const NOTIFICATION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Notifications older than 24 hours are deleted outright, not just marked
+// read - unlike jobs there's no separate "archived" state for them, so
+// without this the list (and the underlying collection) would just grow
+// forever. Runs as a side effect of the bell's own poll (see
+// NotificationBell.jsx - every page polls GET / roughly every 60s), same
+// "no background cron" pattern as checkCalendarDeclines /
+// checkNewAvailabilitySubmissions below and archiveStaleJobs in
+// routes/jobs.js - this app has no separate worker process to run a timer
+// in, so every "automatic" cleanup happens as a side effect of normal use.
+async function pruneOldNotifications() {
+  await Notification.deleteMany({
+    createdAt: { $lt: new Date(Date.now() - NOTIFICATION_MAX_AGE_MS) },
+  });
+}
+
 // GET /api/notifications - list notifications, most recent first, for the
 // bell icon in the navbar (see client/src/components/NotificationBell.jsx,
 // which polls this on every page - not just the Jobs page - so this is
@@ -13,6 +30,7 @@ const router = Router();
 // see services/declineSync.js.
 router.get("/", async (req, res, next) => {
   try {
+    await pruneOldNotifications();
     await checkCalendarDeclines();
     await checkNewAvailabilitySubmissions();
     const notifications = await Notification.find().sort({ createdAt: -1 }).limit(50).lean();
