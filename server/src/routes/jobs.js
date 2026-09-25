@@ -7,6 +7,7 @@ import { syncAssignmentEvents, deleteAssignmentEvent } from "../services/googleC
 import { fillCoordinatesFromLocation, refreshCoordinatesOnUpdate } from "../services/geocode.js";
 import { computePay } from "../services/pay.js";
 import { WORK_AREAS } from "../utils/workAreas.js";
+import { checkCalendarDeclines } from "../services/declineSync.js";
 
 const router = Router();
 
@@ -50,6 +51,12 @@ async function archiveStaleJobs() {
 router.get("/", async (req, res, next) => {
   try {
     await archiveStaleJobs();
+    // Also catches any worker who's declined their calendar invite since
+    // the list was last loaded, and unassigns/notifies for it - see
+    // services/declineSync.js. (The navbar's notification bell triggers
+    // this same check from every page, not just here - see
+    // routes/notifications.js.)
+    await checkCalendarDeclines();
     const jobs = await Job.find().sort({ createdAt: -1 }).populate("assignedWorkers.worker", WORKER_POPULATE);
     res.json(jobs);
   } catch (err) {

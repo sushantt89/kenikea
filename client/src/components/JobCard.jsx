@@ -65,6 +65,24 @@ function money(n, currency = "AUD") {
   return `${symbol}${Number(n).toFixed(2)}`;
 }
 
+// Splits `total` (a dollar amount) into `count` equal cent-accurate shares
+// that add back up to EXACTLY `total` - naively rounding each share to
+// cents on its own can be off by a cent or two once they're added back up
+// (e.g. splitting $6.75 two ways as round(6.75/2) + round(6.75/2) gives
+// $3.38 + $3.38 = $6.76, a cent over). Every share gets the same
+// rounded-down cent amount; whatever's left over (always fewer cents than
+// there are shares) is handed out one cent at a time starting from the
+// last share, since there's no fairer way to split a leftover cent than
+// just picking somewhere for it to go.
+function splitEqually(total, count) {
+  const totalCents = Math.round(total * 100);
+  const base = Math.floor(totalCents / count);
+  const leftoverCents = totalCents - base * count;
+  const shares = new Array(count).fill(base);
+  for (let i = 0; i < leftoverCents; i++) shares[count - 1 - i] += 1;
+  return shares.map((c) => c / 100);
+}
+
 // job.description is one flowing paragraph - short facts joined with ". "
 // (see server/src/services/scraper.js's descriptionParts, e.g.
 // "Products: A; B; C. Estimated duration: 106 mins."). This splits it back
@@ -157,7 +175,7 @@ function AssignedWorkerRow({ assignment, value, disabled, onDraftChange, onRemov
   );
 }
 
-export default function JobCard({ job, onChange }) {
+export default function JobCard({ job, onChange, highlighted }) {
   const { showToast } = useToast();
   const [ranking, setRanking] = useState(null);
   const [openCandidate, setOpenCandidate] = useState(null);
@@ -176,16 +194,49 @@ export default function JobCard({ job, onChange }) {
   // removal, a refetch after another edit) - each entry starts out matching
   // whatever's already saved, and typing from there just edits this local
   // draft until ASSIGN is clicked.
+  //
+  // A worker who doesn't have a SAVED payout yet gets their draft
+  // pre-filled with a suggested amount instead of starting blank: the
+  // "proposed worker payout" (job.pay.adminPay - the business's own GST/
+  // share math, see services/pay.js) split equally between however many
+  // assigned workers still need a payout, so a solo assignment is
+  // suggested the whole amount and a 2-person team is suggested half each.
+  // It's still just a draft - nothing is saved until ASSIGN is clicked, and
+  // it's fully editable first (see the file header note on
+  // handleAssignPayouts below for why nothing auto-saves on its own).
+  // Editing it down (or up) before clicking ASSIGN is exactly how the
+  // profit line ends up different from adminPay - profit is always
+  // `adminPay - (sum of every assigned worker's SAVED payout)`, so paying a
+  // worker less than the suggested amount simply leaves the rest as extra
+  // profit, no separate calculation needed for that.
+  // A worker who ALREADY has a saved payout keeps showing exactly that -
+  // adding a new teammate later never silently changes pay that's already
+  // been committed; only whoever's still unpaid shares what's left of the
+  // proposed payout (adminPay minus whatever's already been committed to
+  // other workers on this job).
   const assignedKey = assignedWorkers.map((a) => `${a.worker?._id || a.worker}:${a.payout ?? ""}`).join(",");
   useEffect(() => {
+    const adminPay = job.pay?.adminPay ?? null;
+    const committed = assignedWorkers.reduce((sum, a) => sum + (a.payout != null ? Number(a.payout) : 0), 0);
+    const unsetIds = assignedWorkers
+      .filter((a) => a.payout == null)
+      .map((a) => a.worker?._id || a.worker);
+    const remainingPot = adminPay != null ? Math.max(0, adminPay - committed) : null;
+    const suggestedById = {};
+    if (remainingPot != null && unsetIds.length > 0) {
+      splitEqually(remainingPot, unsetIds.length).forEach((share, i) => {
+        suggestedById[unsetIds[i]] = share;
+      });
+    }
+
     const next = {};
     for (const a of assignedWorkers) {
       const id = a.worker?._id || a.worker;
-      next[id] = a.payout ?? "";
+      next[id] = a.payout != null ? a.payout : suggestedById[id] ?? "";
     }
     setPayoutDrafts(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job._id, assignedKey]);
+  }, [job._id, assignedKey, job.pay?.adminPay]);
 
   async function handlePreview() {
     setRankingError("");
@@ -369,9 +420,27 @@ export default function JobCard({ job, onChange }) {
   }
 
   const adminPay = job.pay?.adminPay ?? null;
+  const afterGst = job.pay?.afterGst ?? null;
   const totalPayout = assignedWorkers.reduce((sum, a) => sum + (Number(a.payout) || 0), 0);
-  const anyPayoutSet = assignedWorkers.some((a) => a.payout != null);
-  const profit = adminPay != null ? adminPay - totalPayout : null;
+  // Profit is what the business actually keeps: the post-GST amount minus
+  // whatever workers are actually paid (see services/pay.js - adminPay
+  // itself, despite its name, is the PROPOSED worker payout shown in the
+  // UI above, not the business's own cut - the business's real, guaranteed
+  // margin is the other, complementary slice of afterGst: afterGst -
+  // adminPay, e.g. $9.00 - $6.75 = $2.25 on a $10 job).
+  //
+  // Until every currently-assigned worker's payout is actually SAVED (by
+  // clicking ASSIGN) there's no real "what workers are actually paid"
+  // number yet - including when nobody's even assigned at all - so profit
+  // is shown as an ESTIMATE using the full proposed payout (adminPay) as a
+  // stand-in for that, which collapses to exactly that guaranteed baseline
+  // margin above. The moment every assigned worker has a real, saved
+  // payout, profit switches over to the ACTUAL figure - paying a worker
+  // less than the proposed amount adds straight to profit; paying more
+  // eats into it (see the "(estimated ...)" note next to this line below).
+  const settled = assignedWorkers.length > 0 && assignedWorkers.every((a) => a.payout != null);
+  const effectivePayout = settled ? totalPayout : adminPay;
+  const profit = afterGst != null ? afterGst - effectivePayout : null;
   // This job's own currency - AUD for every Australian work area, NZD for
   // Auckland (see utils/workAreas.js). Every dollar figure below is for
   // THIS one job, so there's no cross-currency summing risk here (unlike
@@ -390,7 +459,7 @@ export default function JobCard({ job, onChange }) {
     !assignedWorkers.every((a) => a.payout != null);
 
   return (
-    <div className="card job-card">
+    <div id={`job-${job._id}`} className={`card job-card${highlighted ? " job-card-highlighted" : ""}`}>
       <div className="job-card-header">
         <div>
           <h3>{formatAssignedTitle(job.title, assignedWorkers.map((a) => a.worker?.name), job.customer)}</h3>
@@ -480,7 +549,9 @@ export default function JobCard({ job, onChange }) {
           {adminPay != null && (
             <p className={`pay-line profit-line ${profit >= 0 ? "profit-positive" : "profit-negative"}`}>
               Profit <strong>{money(profit, currency)}</strong>
-              {!anyPayoutSet && <span className="muted small"> (worker payout not entered yet)</span>}
+              {!settled && (
+                <span className="muted small"> (estimated - using the proposed worker payout until it's confirmed)</span>
+              )}
             </p>
           )}
         </div>

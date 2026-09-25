@@ -429,4 +429,34 @@ export async function deleteAssignmentEvent(eventId) {
   }
 }
 
+/**
+ * Reads back the CURRENT attendee response statuses for one calendar
+ * event - used by services/declineSync.js to notice when an assigned
+ * worker has clicked "No" on their invite (Google never pushes that to
+ * this app on its own; someone has to go check). Returns [] rather than
+ * throwing if the event can't be read (deleted from the calendar by hand,
+ * a bad/stale eventId, Calendar not configured, ...) - callers should
+ * treat that the same as "nothing to report", not an error.
+ * @returns {Promise<{email: string, responseStatus: string}[]>}
+ *   responseStatus is one of Google's own values: "needsAction",
+ *   "declined", "tentative", "accepted".
+ */
+export async function getEventAttendees(eventId) {
+  if (!isConfigured() || !eventId) return [];
+
+  try {
+    const calendar = getClient();
+    const { data } = await calendar.events.get({
+      calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
+      eventId,
+    });
+    return (data.attendees || [])
+      .filter((a) => a.email)
+      .map((a) => ({ email: a.email, responseStatus: a.responseStatus }));
+  } catch (err) {
+    console.warn("[googleCalendar] failed to read event attendees:", err.message);
+    return [];
+  }
+}
+
 export { isConfigured };

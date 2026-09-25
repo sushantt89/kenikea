@@ -105,3 +105,8 @@ export const unassignJob = (id) => request(`/jobs/${id}/unassign`, { method: "PO
 export const completeJob = (id) => request(`/jobs/${id}/complete`, { method: "POST" });
 export const archiveJob = (id) => request(`/jobs/${id}/archive`, { method: "POST" });
 export const unarchiveJob = (id) => request(`/jobs/${id}/unarchive`, { method: "POST" });
+
+// Notifications (the bell icon in the navbar - see components/NotificationBell.jsx)
+export const getNotifications = () => request("/notifications");
+export const markNotificationRead = (id) => request(`/notifications/${id}/read`, { method: "PUT" });
+export const markAllNotificationsRead = () => request("/notifications/read-all", { method: "PUT" });

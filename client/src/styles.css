@@ -866,7 +866,25 @@ table {
 /* ---------- Job cards ---------- */
 
 .job-card {
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, outline-color 0.15s ease;
+}
+
+/* Applied to the one job a notification bell click was pointing at (see
+   client/src/pages/Jobs.jsx's "focus" query param handling) - a temporary
+   visual anchor so it's obvious which card the notification meant, once
+   the page has scrolled it into view. */
+.job-card-highlighted {
+  outline: 3px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* Same "opened from a notification bell click" highlight as
+   .job-card-highlighted above, but for a <tr> in WorkerTable.jsx - outline
+   renders unreliably on table rows across browsers, so this uses an inset
+   box-shadow instead to get a comparable highlighted-edge look. */
+.worker-row-highlighted {
+  background: var(--bg-accent);
+  box-shadow: inset 3px 0 0 var(--amber);
 }
 
 .job-card:hover {
@@ -1355,6 +1373,135 @@ table {
 .navbar-logout:hover {
   background: var(--bg-accent);
   color: var(--text);
+}
+
+/* ---------- Notification bell ---------- */
+
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.notification-bell-button:hover {
+  background: var(--bg-accent);
+  color: var(--text);
+}
+
+.notification-bell-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notification-bell-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  z-index: 30;
+}
+
+.notification-bell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.notification-bell-markall {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 0;
+}
+
+.notification-bell-empty {
+  padding: 16px 14px;
+  margin: 0;
+}
+
+.notification-bell-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notification-bell-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.notification-bell-item:last-child {
+  border-bottom: none;
+}
+
+.notification-bell-item:hover {
+  background: var(--bg-accent);
+}
+
+.notification-bell-item.unread {
+  background: var(--bg-accent);
+  font-weight: 600;
+}
+
+.notification-bell-message {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.notification-bell-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 500;
 }
 
 /* ---------- Login page ---------- */

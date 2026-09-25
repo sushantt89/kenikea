@@ -3,7 +3,7 @@ import Worker from "../models/Worker.js";
 import Job from "../models/Job.js";
 import { fillCoordinatesFromLocation, refreshCoordinatesOnUpdate } from "../services/geocode.js";
 import { syncAssignmentEvents, deleteAssignmentEvent } from "../services/googleCalendar.js";
-import { syncAvailabilityFromForm } from "../services/availabilitySync.js";
+import { syncAvailabilityFromForm, checkNewAvailabilitySubmissions } from "../services/availabilitySync.js";
 import { getOrCreateRollout } from "../models/FormRollout.js";
 import { sendEmail } from "../services/mailer.js";
 import { createFortnightForm, isConfigured as formCreationConfigured } from "../services/formManager.js";
@@ -15,6 +15,12 @@ const router = Router();
 // GET /api/workers - list all workers, with their current active job count
 router.get("/", async (req, res, next) => {
   try {
+    // Also catches any new fortnightly-form submission since this was
+    // last loaded, and notifies for it - see
+    // services/availabilitySync.js's checkNewAvailabilitySubmissions()
+    // (the navbar's notification bell triggers this same check from every
+    // page, not just here - see routes/notifications.js).
+    await checkNewAvailabilitySubmissions();
     const workers = await Worker.find().sort({ createdAt: -1 }).lean();
     const activeJobs = await Job.find({ status: "Assigned" }).lean();
 

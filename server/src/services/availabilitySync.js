@@ -1,6 +1,10 @@
 import { google } from "googleapis";
 import Worker from "../models/Worker.js";
+import User from "../models/User.js";
+import Notification from "../models/Notification.js";
+import { getOrCreateRollout } from "../models/FormRollout.js";
 import { listFormResponses } from "./formManager.js";
+import { sendEmail } from "./mailer.js";
 import { WORK_AREAS } from "../utils/workAreas.js";
 
 /**
@@ -304,6 +308,152 @@ export async function syncAvailabilityFromForm(rollout) {
     return syncFromFormsApi(rollout);
   }
   return syncFromSheet();
+}
+
+/**
+ * Notifies (bell icon + email - see models/Notification.js and
+ * services/declineSync.js's checkCalendarDeclines() for the identical
+ * pattern) about any fortnightly-form response that hasn't been seen yet.
+ *
+ * This does NOT touch Worker.formAvailability/workArea at all - actually
+ * pulling a submission's answers into the app stays the separate,
+ * deliberate "Sync availability" button (syncAvailabilityFromForm above).
+ * This is purely a "someone just submitted" heads-up so it's noticed
+ * sooner rather than only whenever someone next happens to click that
+ * button.
+ *
+ * Like checkCalendarDeclines(), this runs as a side effect of a page
+ * load/notification-bell poll (see routes/notifications.js and
+ * routes/workers.js) rather than on any kind of timer - there's no
+ * background process in this app.
+ */
+export async function checkNewAvailabilitySubmissions() {
+  const rollout = await getOrCreateRollout();
+  if (rollout.formId && rollout.questionMap) {
+    await checkNewFormsApiSubmissions(rollout);
+  } else {
+    await checkNewSheetSubmissions(rollout);
+  }
+}
+
+async function notifySubmission(name, email) {
+  const label = (name || "").trim() || (email || "").trim() || "Someone";
+  const message = `${label} submitted their fortnightly availability form.`;
+
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const worker = normalizedEmail ? await Worker.findOne({ email: normalizedEmail }) : null;
+
+  await Notification.create({
+    type: "availability-submitted",
+    message,
+    worker: worker ? worker._id : null,
+  });
+
+  const admins = await User.find({}, "email");
+  await Promise.all(
+    admins
+      .filter((u) => u.email)
+      .map((u) =>
+        sendEmail({
+          to: u.email,
+          subject: "New availability submission",
+          body: `${message}\n\nOpen the app and click "Sync availability" on the Workers page to pull it in.`,
+        })
+      )
+  );
+}
+
+/**
+ * The Forms-API path's half of checkNewAvailabilitySubmissions() - keys
+ * off each response's own Google-assigned responseId (see
+ * models/FormRollout.js's notifiedResponseIds/
+ * availabilityNotificationsInitialized fields for how "already seen" is
+ * tracked, and why the very first run never notifies for anything).
+ */
+async function checkNewFormsApiSubmissions(rollout) {
+  const result = await listFormResponses(rollout.formId);
+  if (!result.ok) return; // best-effort - a read failure just means no notification this time, not an error worth surfacing here
+
+  const responseIds = result.responses.map((r) => r.responseId).filter(Boolean);
+
+  if (!rollout.availabilityNotificationsInitialized) {
+    rollout.notifiedResponseIds = responseIds;
+    rollout.availabilityNotificationsInitialized = true;
+    await rollout.save();
+    return;
+  }
+
+  const alreadyNotified = new Set(rollout.notifiedResponseIds || []);
+  const newResponses = result.responses.filter((r) => r.responseId && !alreadyNotified.has(r.responseId));
+  if (newResponses.length === 0) return;
+
+  const { questionMap } = rollout;
+  const answerText = (response, questionId) =>
+    questionId ? response.answers?.[questionId]?.textAnswers?.answers?.[0]?.value?.trim() || "" : "";
+
+  for (const response of newResponses) {
+    await notifySubmission(answerText(response, questionMap.name), answerText(response, questionMap.email));
+  }
+
+  rollout.notifiedResponseIds = [...alreadyNotified, ...newResponses.map((r) => r.responseId)];
+  await rollout.save();
+}
+
+/**
+ * The Sheets path's half of checkNewAvailabilitySubmissions(), for the
+ * ORIGINAL hand-made form (no Forms-API responseId available for it at
+ * all). Each response row has no id of its own, so its "Timestamp" column
+ * (added automatically by Google Forms to every linked sheet) combined
+ * with the respondent's email stands in as a good-enough unique key.
+ */
+async function checkNewSheetSubmissions(rollout) {
+  if (!sheetIsConfigured()) return;
+
+  const range = process.env.GOOGLE_AVAILABILITY_SHEET_RANGE || "Form Responses 1";
+  let rows;
+  try {
+    const sheets = getSheetsClient();
+    const { data } = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_AVAILABILITY_SHEET_ID,
+      range,
+    });
+    rows = data.values || [];
+  } catch {
+    return; // best-effort, same as above
+  }
+  if (rows.length < 2) return;
+
+  const [headerRow, ...dataRows] = rows;
+  const emailCol = findColumnIndex(headerRow, (h) => h.includes("email"));
+  if (emailCol === -1) return;
+  const nameCol = findColumnIndex(headerRow, (h) => h.includes("name"));
+  const timestampCol = findColumnIndex(headerRow, (h) => h.includes("timestamp"));
+
+  const keys = dataRows.map((row, i) =>
+    timestampCol !== -1 ? `${row[timestampCol]}|${row[emailCol]}` : `row-${i}|${row[emailCol]}`
+  );
+
+  if (!rollout.availabilityNotificationsInitialized) {
+    rollout.notifiedResponseIds = keys;
+    rollout.availabilityNotificationsInitialized = true;
+    await rollout.save();
+    return;
+  }
+
+  const alreadyNotified = new Set(rollout.notifiedResponseIds || []);
+  let anyNew = false;
+  for (let i = 0; i < dataRows.length; i++) {
+    if (alreadyNotified.has(keys[i])) continue;
+    anyNew = true;
+    alreadyNotified.add(keys[i]);
+    const row = dataRows[i];
+    await notifySubmission(nameCol !== -1 ? row[nameCol] : "", row[emailCol]);
+  }
+
+  if (anyNew) {
+    rollout.notifiedResponseIds = [...alreadyNotified];
+    await rollout.save();
+  }
 }
 
 export { sheetIsConfigured as isConfigured };

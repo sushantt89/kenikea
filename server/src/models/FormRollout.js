@@ -35,6 +35,25 @@ const FormRolloutSchema = new Schema(
     // When "Roll out to all workers" was last clicked - drives the "next
     // one due in N days" reminder on the Workers page (14 days later).
     lastRolledOutAt: { type: Date, default: null },
+    // Which form responses have already triggered a "someone submitted
+    // their availability" notification (see
+    // services/availabilitySync.js's checkNewAvailabilitySubmissions) -
+    // the Forms-API response's own responseId for a form this app created
+    // itself, or a synthetic "timestamp|email" key for the original,
+    // hand-made form (which has no responseId to key off, only spreadsheet
+    // rows). Never explicitly cleared on a fortnight rollout - a fresh
+    // form has an entirely fresh, non-overlapping set of Google response
+    // ids anyway, so old entries here just sit around harmlessly rather
+    // than needing to be reset.
+    notifiedResponseIds: { type: [String], default: [] },
+    // False until checkNewAvailabilitySubmissions() has run at least once.
+    // On that very first run, EVERY response that already exists gets
+    // seeded into notifiedResponseIds as already-seen WITHOUT notifying
+    // for any of them (see that function) - otherwise, the moment this
+    // feature first shipped, every historical submission ever made would
+    // all notify/email at once. Only a response that shows up AFTER that
+    // first run is ever actually notified.
+    availabilityNotificationsInitialized: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

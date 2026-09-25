@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import JobCard from "../components/JobCard.jsx";
 import JobsChart from "../components/JobsChart.jsx";
@@ -6,6 +7,7 @@ import { getJobs, getWorkers } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
 import { WORK_AREAS, timezoneForWorkArea, countryForWorkArea, currencyForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
+import { splitJobTitle } from "../utils/jobTitle.js";
 
 const PERIODS = [
   { value: "all", label: "All time" },
@@ -112,12 +114,24 @@ function jobSearchText(job) {
 }
 
 function formatForExport(job) {
-  const date = jobDate(job);
   const assignedWorkers = job.assignedWorkers || [];
   const totalPayout = assignedWorkers.reduce((sum, a) => sum + (Number(a.payout) || 0), 0);
   const adminPay = job.pay?.adminPay ?? null;
+  const afterGst = job.pay?.afterGst ?? null;
+  // Same "estimate until every assigned worker's payout is actually saved"
+  // rule as the on-screen Profit line in JobCard.jsx - see its own comment
+  // for the full rationale. Kept in sync by hand since this export builds
+  // its own row object rather than reusing JobCard's JSX.
+  const settled = assignedWorkers.length > 0 && assignedWorkers.every((a) => a.payout != null);
+  const effectivePayout = settled ? totalPayout : adminPay;
+  // Pulled back out of the stored title - see utils/jobTitle.js. Blank for
+  // a manually-created job that was never scraped from a Beehiive link.
+  const { jobId } = splitJobTitle(job.title);
   return {
-    Title: job.title,
+    "Scheduled start": job.scheduledStart
+      ? formatInZone(job.scheduledStart, timezoneForWorkArea(job.workArea))
+      : "",
+    "Job ID": jobId || "",
     Status: job.status,
     "Assigned worker(s)": assignedWorkers.map((a) => a.worker?.name).filter(Boolean).join(", "),
     "Work area": job.workArea || "",
@@ -129,18 +143,14 @@ function formatForExport(job) {
     Location: job.location || "",
     Priority: job.priority,
     Difficulty: job.difficulty,
-    "Scheduled start": job.scheduledStart
-      ? formatInZone(job.scheduledStart, timezoneForWorkArea(job.workArea))
-      : "",
     "Duration (min)": job.durationMinutes ?? "",
     "IKEA payout ($)": job.chargesTotal ?? "",
     "Proposed worker payout ($)": adminPay ?? "",
     "Worker payout total ($)": assignedWorkers.length ? totalPayout : "",
-    "Profit ($)": adminPay != null ? adminPay - totalPayout : "",
+    "Profit ($)": afterGst != null && effectivePayout != null ? afterGst - effectivePayout : "",
     "Customer name": job.customer?.name || "",
     "Customer phone": job.customer?.phone || "",
     "Customer email": job.customer?.email || "",
-    "Sort date": date ? date.toISOString() : "",
   };
 }
 
@@ -165,6 +175,31 @@ export default function Jobs() {
   // field for how a job gets into that state (auto after 6 months, or by
   // hand via the Archive button on its card).
   const [archivedFilter, setArchivedFilter] = useState("active");
+
+  // Set when this page was opened from a notification bell click (see
+  // components/NotificationBell.jsx), e.g. "/jobs?focus=<jobId>" - that one
+  // job is always shown regardless of every other filter above (see
+  // filteredJobs below) and gets scrolled into view + a highlight outline
+  // (see the "job-card-highlighted" class). Kept in its own piece of state
+  // (rather than just reading searchParams directly wherever it's needed)
+  // so it survives the "focus" param being stripped back out of the URL
+  // right below - done purely so the URL bar itself looks clean/shareable,
+  // and a later reload of the same URL doesn't re-focus forever. Watching
+  // searchParams itself (not a one-time-on-mount read) is what lets a
+  // SECOND notification click work correctly even while already sitting on
+  // this page - Jobs.jsx doesn't remount just because the query string
+  // changed, so a one-time read would miss it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [focusJobId, setFocusJobId] = useState(() => searchParams.get("focus"));
+
+  useEffect(() => {
+    const focus = searchParams.get("focus");
+    if (!focus) return;
+    setFocusJobId(focus);
+    const next = new URLSearchParams(searchParams);
+    next.delete("focus");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // `loading` gates the very first render (a full-page "Loading jobs..."
   // placeholder while there's nothing to show yet). Every later reload -
@@ -202,6 +237,9 @@ export default function Jobs() {
     const range = period === "custom" ? customRange(customStart, customEnd) : periodRange(period);
     const query = search.trim().toLowerCase();
     return jobs.filter((job) => {
+      // A job opened via a notification bell click always shows, no matter
+      // what the filters above are currently set to - see focusJobId above.
+      if (focusJobId && job._id === focusJobId) return true;
       if (query && !jobSearchText(job).includes(query)) return false;
       if (range) {
         const d = jobDate(job);
@@ -239,8 +277,17 @@ export default function Jobs() {
     workAreaFilter,
     countryFilter,
     archivedFilter,
+    focusJobId,
     search,
   ]);
+
+  // Scrolls the focused job's card into view once it's actually in the
+  // (post-filter) list and rendered - see focusJobId above.
+  useEffect(() => {
+    if (!focusJobId) return;
+    const el = document.getElementById(`job-${focusJobId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusJobId, filteredJobs]);
 
   function handleExport() {
     const rows = filteredJobs.map(formatForExport);
@@ -372,7 +419,7 @@ export default function Jobs() {
           ) : (
             <div className="job-list">
               {filteredJobs.map((job) => (
-                <JobCard key={job._id} job={job} onChange={loadAll} />
+                <JobCard key={job._id} job={job} onChange={loadAll} highlighted={job._id === focusJobId} />
               ))}
             </div>
           )}

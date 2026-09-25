@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import WorkerForm from "../components/WorkerForm.jsx";
 import WorkerTable from "../components/WorkerTable.jsx";
 import {
@@ -27,6 +28,23 @@ export default function Workers() {
   const { showToast } = useToast();
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Set when this page was opened from a notification bell click (see
+  // components/NotificationBell.jsx), e.g. "/workers?focus=<workerId>" -
+  // same "focus" pattern as pages/Jobs.jsx (see its own comment for the
+  // full rationale). WorkerTable uses this to scroll to and highlight that
+  // one worker's row and pop their availability modal straight open.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [focusWorkerId, setFocusWorkerId] = useState(() => searchParams.get("focus"));
+
+  useEffect(() => {
+    const focus = searchParams.get("focus");
+    if (!focus) return;
+    setFocusWorkerId(focus);
+    const next = new URLSearchParams(searchParams);
+    next.delete("focus");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null); // worker being edited, or null for "add"
   const [showForm, setShowForm] = useState(false);
@@ -317,6 +335,7 @@ export default function Workers() {
           }}
           onDelete={handleDelete}
           onAvailabilityChange={load}
+          highlightId={focusWorkerId}
         />
       )}
     </div>

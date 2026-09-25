@@ -9,6 +9,7 @@ import { ensureDefaultAdmin } from "./services/auth.js";
 import authRouter from "./routes/auth.js";
 import workersRouter from "./routes/workers.js";
 import jobsRouter from "./routes/jobs.js";
+import notificationsRouter from "./routes/notifications.js";
 import { clientDistPath, isSingleServiceDeployment } from "./utils/deployment.js";
 import { PRIVACY_POLICY_HTML } from "./utils/legalPages.js";
 
@@ -33,6 +34,7 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRouter);
 app.use("/api/workers", requireAuth, workersRouter);
 app.use("/api/jobs", requireAuth, jobsRouter);
+app.use("/api/notifications", requireAuth, notificationsRouter);
 
 // 404 for unknown API routes
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));

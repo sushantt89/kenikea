@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import NotificationBell from "./NotificationBell.jsx";
 
 // A small hamburger toggle handles narrow/mobile widths (see the
 // .navbar-toggle / .navbar-links.open rules in styles.css); on wider
@@ -42,6 +43,7 @@ export default function Navbar() {
         <NavLink to="/settings" className={linkClass} onClick={closeMenu}>
           Settings
         </NavLink>
+        {user && <NotificationBell />}
         {user && <span className="navbar-user-name">{user.name}</span>}
         <button
           type="button"

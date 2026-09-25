@@ -1,9 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WORK_AREA_SWATCH } from "../utils/workAreas.js";
 import { FortnightCell, FortnightModal } from "./FortnightAvailability.jsx";
 
-export default function WorkerTable({ workers, onEdit, onDelete, onAvailabilityChange }) {
+export default function WorkerTable({ workers, onEdit, onDelete, onAvailabilityChange, highlightId }) {
   const [openWorker, setOpenWorker] = useState(null);
+
+  // Opened from a notification bell click (see pages/Workers.jsx's
+  // focusWorkerId) - jump straight to that worker's availability instead of
+  // making them find the row and click it themselves, and scroll/highlight
+  // the row underneath for context. Depends on `workers` too since this
+  // page's data can still be loading (and `workers` still []) the moment
+  // this mounts from a fresh navigation.
+  useEffect(() => {
+    if (!highlightId) return;
+    const match = workers.find((w) => w._id === highlightId);
+    if (!match) return;
+    setOpenWorker(match);
+    const el = document.getElementById(`worker-${highlightId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId, workers]);
 
   // After a save inside FortnightModal, show the just-saved data immediately
   // (openWorker is a snapshot from the `workers` prop, so it won't reflect
@@ -37,7 +53,11 @@ export default function WorkerTable({ workers, onEdit, onDelete, onAvailabilityC
       </thead>
       <tbody>
         {workers.map((w) => (
-          <tr key={w._id}>
+          <tr
+            key={w._id}
+            id={`worker-${w._id}`}
+            className={w._id === highlightId ? "worker-row-highlighted" : undefined}
+          >
             <td>{w.name}</td>
             <td>{w.email}</td>
             <td>{w.location}</td>
