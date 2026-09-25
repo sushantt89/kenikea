@@ -3,11 +3,19 @@
 // title ("Job <id>") when no better title text was found (see
 // services/scraper.js's draftFromBeehiiveHtml). There's no separate stored
 // jobId field, so this pulls it back out of the title whenever a display
-// needs the id and the rest of the title separately - used to build the
-// "WorkerA + WorkerB (12345) - Title" format shown once a job has an
-// assigned team (see googleCalendar.js's createAssignmentEvent, and the
-// client's equivalent client/src/utils/jobTitle.js for the Jobs list -
-// kept in sync by hand since client/server don't share code in this repo).
+// needs it - used to build the "WorkerA + WorkerB (12345) - Customer Name"
+// format shown as a job's title everywhere it's displayed (see
+// googleCalendar.js's createAssignmentEvent, and the client's equivalent
+// client/src/utils/jobTitle.js for the Jobs list - kept in sync by hand
+// since client/server don't share code in this repo).
+//
+// The job's own scraped/typed title text (e.g. "PAX wardrobe assembly",
+// "Assembly Rectification") is deliberately NOT part of that display
+// title anymore - it rarely helps tell one job apart from another at a
+// glance, whereas who's working it and which customer it's for does. The
+// raw title text itself is untouched on Job.title (still shown/edited via
+// JobDraftForm's "Title" field, still searchable) - only the DISPLAY
+// string built by formatAssignedTitle() below drops it.
 const JOB_ID_SUFFIX = /\s*\(Job\s+(\d+)\)\s*$/i;
 const JOB_ID_ONLY = /^Job\s+(\d+)$/i;
 
@@ -35,18 +43,37 @@ export function splitJobTitle(title) {
 }
 
 /**
- * "WorkerA + WorkerB (12345) - Title" - the display format used once a job
- * has one or more workers to show (an assigned team, or whoever's invited
- * to a specific calendar event). Falls back to the plain title unchanged
- * when there's nobody to lead with, so an unassigned job's title is
- * untouched.
+ * "WorkerA + WorkerB (12345) - Customer Name (Customer Phone)" - the
+ * display title used for a job everywhere its title is shown (the Jobs list, a calendar event summary).
+ * Leads with whoever's actually being shown (the assigned team, or - for one specific calendar event - just that event's invitee(s), which isn't always the whole team), falling back to "Unassigned"
+ * when there's nobody yet; keeps the IKEA "(Job <id>)" tag pulled out of
+ * the stored title; and ends with the CUSTOMER's name and phone number
+ * (never their email - that stays admin-only) when on file, since for
+ * this business who's doing a job, which customer it's for, and how to
+ * reach them identify it far better than its own generic scraped
+ * description ever did.
+ * Falls back to the plain stored title only when there's truly nothing to
+ * build a useful display from - no job id, no customer name/phone, nobody
+ * assigned - e.g. a bare manually-created job with no customer entered
+ * yet.
+ * @param {object} [customer] - job.customer ({name, phone, email}) -
+ *   only name and phone are ever used here.
  */
-export function formatAssignedTitle(title, workerNames) {
+export function formatAssignedTitle(title, workerNames, customer) {
   const names = (workerNames || []).filter(Boolean);
-  if (names.length === 0) return title || "";
+  const { jobId } = splitJobTitle(title);
+  const customerName = (customer?.name || "").trim();
+  const customerPhone = (customer?.phone || "").trim();
+  const customerPart = customerName
+    ? customerPhone
+      ? `${customerName} (${customerPhone})`
+      : customerName
+    : customerPhone;
 
-  const { jobId, cleanTitle } = splitJobTitle(title);
-  const who = names.join(" + ");
+  if (!jobId && !customerPart && names.length === 0) return title || "";
+
+  const who = names.length > 0 ? names.join(" + ") : "Unassigned";
   const idPart = jobId ? ` (${jobId})` : "";
-  return cleanTitle ? `${who}${idPart} - ${cleanTitle}` : `${who}${idPart}`;
+  const lead = `${who}${idPart}`;
+  return customerPart ? `${lead} - ${customerPart}` : lead;
 }

@@ -12,6 +12,7 @@ const PERIODS = [
   { value: "day", label: "Today" },
   { value: "week", label: "This week" },
   { value: "month", label: "This month" },
+  { value: "custom", label: "Custom range" },
 ];
 
 const STATUSES = ["Unassigned", "Assigned", "Completed"];
@@ -62,6 +63,26 @@ function periodRange(period) {
   }
 
   return null; // "all" - no range
+}
+
+// [start, end) for a hand-picked "Custom range" (see the two date inputs
+// shown once Period is set to "custom"). `startStr`/`endStr` are plain
+// "YYYY-MM-DD" strings straight from a native <input type="date">, parsed
+// as LOCAL midnight (not UTC) so the range lines up with jobDate()'s own
+// local-time comparisons. `end` is inclusive of the whole day picked, so
+// choosing the same day for both bounds shows just that one day - that's
+// why it's pushed forward one calendar day before being used as the
+// exclusive upper bound, same convention as periodRange() above. Leaving
+// either box blank leaves that side of the range open (any date up to /
+// from the other one that IS set); leaving both blank means no filtering
+// at all yet, same as period "all".
+function customRange(startStr, endStr) {
+  if (!startStr && !endStr) return null;
+
+  const start = startStr ? new Date(`${startStr}T00:00:00`) : new Date(0);
+  const end = endStr ? new Date(`${endStr}T00:00:00`) : new Date(8640000000000000);
+  if (endStr) end.setDate(end.getDate() + 1);
+  return [start, end];
 }
 
 // One lowercased blob of everything a user might plausibly search a job
@@ -132,10 +153,18 @@ export default function Jobs() {
 
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState("all");
+  // Only used while period === "custom" - see customRange() above.
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [workerFilter, setWorkerFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [workAreaFilter, setWorkAreaFilter] = useState("all");
   const [countryFilter, setCountryFilter] = useState("all");
+  // "active" (default) hides archived jobs from every other view; "archived"
+  // shows ONLY archived jobs, on their own - see the Job model's `archived`
+  // field for how a job gets into that state (auto after 6 months, or by
+  // hand via the Archive button on its card).
+  const [archivedFilter, setArchivedFilter] = useState("active");
 
   // `loading` gates the very first render (a full-page "Loading jobs..."
   // placeholder while there's nothing to show yet). Every later reload -
@@ -170,7 +199,7 @@ export default function Jobs() {
   }, []);
 
   const filteredJobs = useMemo(() => {
-    const range = periodRange(period);
+    const range = period === "custom" ? customRange(customStart, customEnd) : periodRange(period);
     const query = search.trim().toLowerCase();
     return jobs.filter((job) => {
       if (query && !jobSearchText(job).includes(query)) return false;
@@ -191,9 +220,27 @@ export default function Jobs() {
         if (job.workArea !== workAreaFilter) return false;
       }
       if (countryFilter !== "all" && countryForWorkArea(job.workArea) !== countryFilter) return false;
+      // "all" shows both active and archived jobs together - "active" and
+      // "archived" each show only their own.
+      if (archivedFilter === "archived") {
+        if (!job.archived) return false;
+      } else if (archivedFilter === "active") {
+        if (job.archived) return false;
+      }
       return true;
     });
-  }, [jobs, period, workerFilter, statusFilter, workAreaFilter, countryFilter, search]);
+  }, [
+    jobs,
+    period,
+    customStart,
+    customEnd,
+    workerFilter,
+    statusFilter,
+    workAreaFilter,
+    countryFilter,
+    archivedFilter,
+    search,
+  ]);
 
   function handleExport() {
     const rows = filteredJobs.map(formatForExport);
@@ -234,6 +281,18 @@ export default function Jobs() {
             ))}
           </select>
         </label>
+        {period === "custom" && (
+          <>
+            <label>
+              From
+              <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+            </label>
+            <label>
+              To
+              <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+            </label>
+          </>
+        )}
         <label>
           Worker
           <select value={workerFilter} onChange={(e) => setWorkerFilter(e.target.value)}>
@@ -278,6 +337,14 @@ export default function Jobs() {
                 {country}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          View
+          <select value={archivedFilter} onChange={(e) => setArchivedFilter(e.target.value)}>
+            <option value="active">Active jobs</option>
+            <option value="archived">Archived jobs only</option>
+            <option value="all">All jobs (active + archived)</option>
           </select>
         </label>
         <div className="filter-bar-actions">

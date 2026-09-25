@@ -140,6 +140,16 @@ const JobSchema = new Schema(
       confidence: { type: String, enum: ["high", "medium", "low"], default: "low" },
       notes: { type: String, default: "" },
     },
+    // Hides a job from the normal Jobs list once it's stale, without ever
+    // deleting it - see routes/jobs.js's archiveStaleJobs(), which sweeps
+    // every job older than 6 months (by scheduledStart, or createdAt when
+    // it has none) into here automatically on every Jobs list load. Also
+    // settable by hand at any age via the "Archive"/"Unarchive" button on
+    // each job's card (client/src/components/JobCard.jsx) - the Jobs page
+    // has a filter to view archived jobs on their own (see Jobs.jsx),
+    // otherwise they're excluded from every other view.
+    archived: { type: Boolean, default: false },
+    archivedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

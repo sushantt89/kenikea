@@ -13,9 +13,43 @@ const router = Router();
 const MAX_CONCURRENT_JOBS = Number(process.env.MAX_CONCURRENT_JOBS || 2);
 const WORKER_POPULATE = "name email location workArea";
 
+// A job counts as "old" once its own date - scheduledStart when it has
+// one, otherwise when it was created - is more than 6 months in the past.
+// Mirrors the same "job's own date" concept the Jobs page's period
+// filters already use (see client/src/pages/Jobs.jsx's jobDate()).
+function sixMonthsAgo() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 6);
+  return d;
+}
+
+/**
+ * Auto-archives every job whose own date is more than 6 months old and
+ * isn't already archived. Run at the top of GET / (the Jobs list) so the
+ * list is always current without needing a separate scheduled task/cron
+ * process running alongside this single web service. Only ever flips
+ * archived from false to true - a job archived this way (or by hand, see
+ * POST /:id/archive below) stays archived until someone explicitly
+ * unarchives it.
+ */
+async function archiveStaleJobs() {
+  const cutoff = sixMonthsAgo();
+  await Job.updateMany(
+    {
+      archived: { $ne: true },
+      $or: [
+        { scheduledStart: { $ne: null, $lt: cutoff } },
+        { scheduledStart: null, createdAt: { $lt: cutoff } },
+      ],
+    },
+    { $set: { archived: true, archivedAt: new Date() } }
+  );
+}
+
 // GET /api/jobs - list all jobs, most recent first
 router.get("/", async (req, res, next) => {
   try {
+    await archiveStaleJobs();
     const jobs = await Job.find().sort({ createdAt: -1 }).populate("assignedWorkers.worker", WORKER_POPULATE);
     res.json(jobs);
   } catch (err) {
@@ -277,6 +311,41 @@ router.post("/:id/complete", async (req, res, next) => {
     const job = await Job.findByIdAndUpdate(
       req.params.id,
       { status: "Completed" },
+      { new: true }
+    ).populate("assignedWorkers.worker", WORKER_POPULATE);
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json(job);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/jobs/:id/archive - manually archive a job regardless of its
+// age (the "Archive" button on every job's card) - see archiveStaleJobs()
+// above for the automatic, 6-months-old version of this same flag. Doesn't
+// touch status/assignment/calendar - archiving only hides a job from the
+// normal Jobs list, it isn't a status change.
+router.post("/:id/archive", async (req, res, next) => {
+  try {
+    const job = await Job.findByIdAndUpdate(
+      req.params.id,
+      { archived: true, archivedAt: new Date() },
+      { new: true }
+    ).populate("assignedWorkers.worker", WORKER_POPULATE);
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    res.json(job);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/jobs/:id/unarchive - bring an archived job back into the
+// normal Jobs view.
+router.post("/:id/unarchive", async (req, res, next) => {
+  try {
+    const job = await Job.findByIdAndUpdate(
+      req.params.id,
+      { archived: false, archivedAt: null },
       { new: true }
     ).populate("assignedWorkers.worker", WORKER_POPULATE);
     if (!job) return res.status(404).json({ error: "Job not found" });

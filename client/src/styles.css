@@ -885,6 +885,13 @@ table {
   font-size: 1.05rem;
 }
 
+.job-card-header-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .job-description {
   font-size: 0.9rem;
   color: var(--text);

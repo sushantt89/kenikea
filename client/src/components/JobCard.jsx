@@ -9,6 +9,8 @@ import {
   completeJob,
   deleteJob,
   updateJob,
+  archiveJob,
+  unarchiveJob,
 } from "../api.js";
 import JobDraftForm from "./JobDraftForm.jsx";
 import { normalizeScore, scoreColor } from "../utils/scoreScale.js";
@@ -332,6 +334,27 @@ export default function JobCard({ job, onChange }) {
     }
   }
 
+  // Toggles the `archived` flag by hand at any age - see the Job model's
+  // comment on `archived` for how a job also gets archived automatically
+  // once it's 6 months old. Doesn't touch status/assignment/calendar;
+  // archiving only hides a job from the normal Jobs list (see Jobs.jsx's
+  // "View" filter).
+  async function handleToggleArchive() {
+    setBusy(true);
+    try {
+      if (job.archived) {
+        await unarchiveJob(job._id);
+        showToast(`"${job.title}" unarchived`, "success");
+      } else {
+        await archiveJob(job._id);
+        showToast(`"${job.title}" archived`, "success");
+      }
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Reuses the exact same form Home.jsx uses to create a job - see
   // JobDraftForm's isEdit flag, which just changes a couple of labels.
   // Available regardless of job status: a scraped or manually-entered
@@ -370,7 +393,7 @@ export default function JobCard({ job, onChange }) {
     <div className="card job-card">
       <div className="job-card-header">
         <div>
-          <h3>{formatAssignedTitle(job.title, assignedWorkers.map((a) => a.worker?.name))}</h3>
+          <h3>{formatAssignedTitle(job.title, assignedWorkers.map((a) => a.worker?.name), job.customer)}</h3>
           <p className="muted small">
             {job.location || "No location"} &middot; difficulty {job.difficulty} &middot; priority {job.priority}
             {job.workArea && (
@@ -381,7 +404,10 @@ export default function JobCard({ job, onChange }) {
             )}
           </p>
         </div>
-        <span className={`pill ${STATUS_CLASS[job.status]}`}>{job.status}</span>
+        <div className="job-card-header-pills">
+          {job.archived && <span className="pill pill-gray">Archived</span>}
+          <span className={`pill ${STATUS_CLASS[job.status]}`}>{job.status}</span>
+        </div>
       </div>
 
       <JobDescriptionView description={job.description} />
@@ -528,6 +554,9 @@ export default function JobCard({ job, onChange }) {
         )}
         <button className="btn btn-small" onClick={() => setEditing(true)} disabled={busy}>
           Edit
+        </button>
+        <button className="btn btn-small" onClick={handleToggleArchive} disabled={busy}>
+          {job.archived ? "Unarchive" : "Archive"}
         </button>
         <button className="btn btn-small btn-danger" onClick={handleDelete} disabled={busy}>
           Delete

@@ -103,3 +103,5 @@ export const unassignWorkerFromJob = (id, workerId) =>
   request(`/jobs/${id}/unassign-worker/${workerId}`, { method: "POST" });
 export const unassignJob = (id) => request(`/jobs/${id}/unassign`, { method: "POST" });
 export const completeJob = (id) => request(`/jobs/${id}/complete`, { method: "POST" });
+export const archiveJob = (id) => request(`/jobs/${id}/archive`, { method: "POST" });
+export const unarchiveJob = (id) => request(`/jobs/${id}/unarchive`, { method: "POST" });

@@ -268,16 +268,20 @@ export async function createAssignmentEvent(job, team, options = {}) {
 
   // Lead the event title with whoever is actually invited to THIS event
   // (not always the full team - a personal, single-worker event should only
-  // show that one worker's name, not the whole team's), and move the
-  // scraped "(Job <id>)" tag (see utils/jobTitle.js) up next to their
-  // name(s) too, so a shared calendar reads "Ana + Ben (695676) - Attend,
-  // set up..." at a glance without opening the event - matching the same
-  // format the Jobs list uses (see client/src/components/JobCard.jsx).
-  // Falls back to the plain title if somehow none of the invitees have a
-  // name.
+  // show that one worker's name, not the whole team's), keep the scraped
+  // "(Job <id>)" tag (see utils/jobTitle.js) next to their name(s), and end
+  // with the CUSTOMER's name and phone (never their email - see the
+  // Customer section built below, same rule) instead of the job's own
+  // scraped description - so a shared calendar reads "Ana + Ben (695676) -
+  // John Smith (021 899 987)" at a glance without opening the event -
+  // matching the same format the Jobs list uses (see
+  // client/src/components/JobCard.jsx). Falls back to the plain title if
+  // there's truly nothing to build a useful title from (no job id, no
+  // customer name/phone, and somehow none of the invitees have a name).
   const summary = formatAssignedTitle(
     job.title,
-    invitable.map((w) => w.name)
+    invitable.map((w) => w.name),
+    job.customer
   );
 
   try {
