@@ -145,10 +145,12 @@ router.get("/me", requireAuth, async (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
-// GET /api/auth/users - list accounts, for the Settings page.
+// GET /api/auth/users - list accounts, for the Settings page. Excludes
+// any account marked hidden (see the User model's `hidden` field comment)
+// - those still exist and can still log in, they just never show up here.
 router.get("/users", requireAuth, async (req, res, next) => {
   try {
-    const users = await User.find().sort({ createdAt: 1 }).lean();
+    const users = await User.find({ hidden: { $ne: true } }).sort({ createdAt: 1 }).lean();
     res.json(users.map(publicUser));
   } catch (err) {
     next(err);
