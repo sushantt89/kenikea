@@ -9,9 +9,22 @@ import { google } from "googleapis";
  * token (see server/scripts/getGoogleRefreshToken.js - re-run it once to
  * pick up this scope if your existing token predates it).
  *
- * Gmail's API sends "as" whichever account owns the OAuth token - there's
- * no separate "from" address to configure, and no SMTP password/app
- * password to manage.
+ * Gmail's API sends "as" whichever account owns the OAuth token by
+ * default - there's no separate "from" address to configure, and no
+ * SMTP password/app password to manage.
+ *
+ * OPTIONAL MAIL_FROM env var: to send as a different address without a
+ * second OAuth token, add that address as a verified "Send mail as"
+ * alias on the SAME Gmail account this refresh token belongs to (Gmail
+ * Settings -> See all settings -> Accounts and Import -> Send mail as ->
+ * Add another email address; the alias owner clicks a one-time
+ * verification link Gmail emails them). Once verified, set MAIL_FROM to
+ * that address - either bare ("wyelee.my@gmail.com") or with a display
+ * name ("WyeLee <wyelee.my@gmail.com>") - and every email this app sends
+ * goes out From that address instead, using this same refresh token.
+ * Leave MAIL_FROM unset to keep the old default (the token account's own
+ * address). Sending will fail if MAIL_FROM is set to an address that
+ * ISN'T yet a verified alias on this account - verify it first.
  *
  * If the required env vars aren't set, sendEmail()/isConfigured() behave
  * like the other Google integrations in this app: a harmless "not
@@ -47,6 +60,11 @@ function getClient() {
 function buildRawMessage({ to, subject, body }) {
   const lines = [
     `To: ${to}`,
+    // Only added when MAIL_FROM is set - see the file header comment.
+    // Omitting the header entirely (rather than sending an empty one)
+    // keeps the old default behavior for everyone who hasn't set it:
+    // Gmail fills in the token account's own address on its own.
+    ...(process.env.MAIL_FROM ? [`From: ${process.env.MAIL_FROM}`] : []),
     "Content-Type: text/plain; charset=utf-8",
     "MIME-Version: 1.0",
     `Subject: ${subject}`,
