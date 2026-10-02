@@ -29,6 +29,7 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="card login-card">
+        <img src="/wyelee-logo.png" alt="WyeLee" className="login-logo" />
         <h1>Worker Assignment</h1>
         <span className="muted small login-subtitle">Log in to continue</span>
 

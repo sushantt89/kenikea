@@ -16,7 +16,10 @@ export default function Navbar() {
 
   return (
     <header className="navbar">
-      <div className="navbar-brand">Worker Assignment</div>
+      <div className="navbar-brand">
+        <img src="/wyelee-logo.png" alt="" className="navbar-brand-logo" />
+        Worker Assignment
+      </div>
 
       <button
         type="button"
