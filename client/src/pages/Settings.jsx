@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useTheme } from "../theme/ThemeContext.jsx";
-import { getUsers, createUser, deleteUser } from "../api.js";
+import { getUsers, createUser, deleteUser, forgotPassword } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
 
 const EMPTY_FORM = { name: "", email: "", password: "", confirmPassword: "" };
@@ -18,6 +18,8 @@ export default function Settings() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const [sendingReset, setSendingReset] = useState(false);
 
   async function loadUsers() {
     setLoading(true);
@@ -37,6 +39,24 @@ export default function Settings() {
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  // Reuses the same "forgot password" flow the login page's link uses -
+  // emails a one-time reset link to your own address rather than asking
+  // you to type your current password here. Works even if you've
+  // forgotten your current password, which a "type it to confirm" form
+  // wouldn't.
+  async function handleSendResetEmail() {
+    if (!user?.email) return;
+    setSendingReset(true);
+    try {
+      await forgotPassword(user.email);
+      showToast(`Password reset link sent to ${user.email}`, "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setSendingReset(false);
+    }
   }
 
   async function handleAddUser(e) {
@@ -91,6 +111,16 @@ export default function Settings() {
           </button>
           <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>
             Dark
+          </button>
+        </div>
+      </div>
+
+      <div className="card settings-section">
+        <h2>Password</h2>
+        <p className="muted small">We'll email a secure link to {user?.email} to set a new password.</p>
+        <div className="form-actions">
+          <button type="button" className="btn btn-primary" onClick={handleSendResetEmail} disabled={sendingReset}>
+            {sendingReset ? "Sending..." : "Send password reset email"}
           </button>
         </div>
       </div>
