@@ -10,6 +10,10 @@ import authRouter from "./routes/auth.js";
 import workersRouter from "./routes/workers.js";
 import jobsRouter from "./routes/jobs.js";
 import notificationsRouter from "./routes/notifications.js";
+import pushRouter from "./routes/push.js";
+import { isPushConfigured } from "./services/push.js";
+import { checkCalendarDeclines } from "./services/declineSync.js";
+import { checkNewAvailabilitySubmissions } from "./services/availabilitySync.js";
 import { clientDistPath, isSingleServiceDeployment } from "./utils/deployment.js";
 import { PRIVACY_POLICY_HTML } from "./utils/legalPages.js";
 
@@ -35,6 +39,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/workers", requireAuth, workersRouter);
 app.use("/api/jobs", requireAuth, jobsRouter);
 app.use("/api/notifications", requireAuth, notificationsRouter);
+app.use("/api/push", requireAuth, pushRouter);
 
 // 404 for unknown API routes
 app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
@@ -84,6 +89,36 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
+// Notifications are normally created as a side effect of someone's open app
+// polling (see routes/notifications.js) - which means nothing would ever be
+// PUSHED to a phone while nobody has the app open. When push is set up,
+// this runs the same two checks on a timer so a decline or a new
+// availability submission is caught (and pushed) on its own. Only runs
+// while the server process is awake - a host that sleeps an idle service
+// (e.g. Render's free plan) pauses it too. Set BACKGROUND_CHECK_MS=0 to
+// turn it off, or to another number of milliseconds to change the 2-minute
+// default.
+function startBackgroundChecks() {
+  if (!isPushConfigured()) return;
+  const everyMs = process.env.BACKGROUND_CHECK_MS === undefined ? 120000 : Number(process.env.BACKGROUND_CHECK_MS);
+  if (!Number.isFinite(everyMs) || everyMs <= 0) return;
+
+  let running = false;
+  setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      await checkCalendarDeclines();
+      await checkNewAvailabilitySubmissions();
+    } catch (err) {
+      console.error("[background] check failed:", err.message);
+    } finally {
+      running = false;
+    }
+  }, everyMs);
+  console.log(`[server] background notification checks every ${Math.round(everyMs / 1000)}s (push is on)`);
+}
+
 async function start() {
   try {
     await connectDB();
@@ -106,6 +141,8 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`[server] listening on http://localhost:${PORT}`);
   });
+
+  startBackgroundChecks();
 }
 
 start();

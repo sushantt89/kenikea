@@ -4,6 +4,7 @@ import { useTheme } from "../theme/ThemeContext.jsx";
 import { getUsers, createUser, deleteUser, forgotPassword } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
 import InstallApp from "../components/InstallApp.jsx";
+import PushNotifications from "../components/PushNotifications.jsx";
 
 const EMPTY_FORM = { name: "", email: "", password: "", confirmPassword: "" };
 
@@ -117,6 +118,7 @@ export default function Settings() {
       </div>
 
       <InstallApp />
+      <PushNotifications />
 
       <div className="card settings-section">
         <h2>Password</h2>

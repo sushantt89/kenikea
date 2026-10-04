@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { sendPush } from "../services/push.js";
 
 const { Schema } = mongoose;
 
@@ -31,5 +32,20 @@ const NotificationSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Every newly created notification is also pushed to phones/desktops that
+// turned push on in Settings (see services/push.js) - hooked here, on the
+// model, so it fires no matter which service created the notification.
+// Fire-and-forget: sendPush() never throws.
+NotificationSchema.pre("save", function () {
+  this.$locals.wasNew = this.isNew;
+});
+NotificationSchema.post("save", function (doc) {
+  if (!doc.$locals.wasNew) return;
+  let url = "/";
+  if (doc.job) url = `/jobs?focus=${doc.job}`;
+  else if (doc.worker) url = `/workers?focus=${doc.worker}`;
+  sendPush({ title: "Worker Assignment", body: doc.message, url, tag: String(doc._id) });
+});
 
 export default mongoose.model("Notification", NotificationSchema);

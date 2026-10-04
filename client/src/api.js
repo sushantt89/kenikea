@@ -70,6 +70,14 @@ export const getUsers = () => request("/auth/users");
 export const createUser = (data) => request("/auth/users", { method: "POST", body: JSON.stringify(data) });
 export const deleteUser = (id) => request(`/auth/users/${id}`, { method: "DELETE" });
 
+// Push notifications
+export const getPushPublicKey = () => request("/push/public-key");
+export const subscribePush = (subscription) =>
+  request("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription }) });
+export const unsubscribePush = (endpoint) =>
+  request("/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint }) });
+export const sendTestPush = () => request("/push/test", { method: "POST" });
+
 // Workers
 export const getWorkers = () => request("/workers");
 export const getWorker = (id) => request(`/workers/${id}`);
