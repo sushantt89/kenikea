@@ -147,19 +147,54 @@ export function verifyResetToken(user, token) {
  */
 export async function ensureDefaultAdmin() {
   const count = await User.countDocuments();
-  if (count > 0) return;
 
-  const email = (process.env.ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
-  const generatedPassword = !process.env.ADMIN_PASSWORD;
-  const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString("base64url");
+  if (count === 0) {
+    const email = (process.env.ADMIN_EMAIL || "admin@example.com").toLowerCase().trim();
+    const generatedPassword = !process.env.ADMIN_PASSWORD;
+    const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString("base64url");
 
-  await User.create({ name: "Admin", email, passwordHash: hashPassword(password) });
+    await User.create({
+      name: process.env.ADMIN_NAME || "Admin",
+      email,
+      passwordHash: hashPassword(password),
+    });
 
-  console.log("[auth] No user accounts existed yet - created a default one so you can log in:");
-  console.log(`[auth]   email:    ${email}`);
-  console.log(
-    generatedPassword
-      ? `[auth]   password: ${password}  (generated - set ADMIN_PASSWORD in server/.env to control this, and please change it via Settings after your first login)`
-      : "[auth]   password: (the value of ADMIN_PASSWORD in server/.env)"
-  );
+    console.log("[auth] No user accounts existed yet - created a default one so you can log in:");
+    console.log(`[auth]   email:    ${email}`);
+    console.log(
+      generatedPassword
+        ? `[auth]   password: ${password}  (generated - set ADMIN_PASSWORD in server/.env to control this, and please change it via Settings after your first login)`
+        : "[auth]   password: (the value of ADMIN_PASSWORD in server/.env)"
+    );
+  }
+
+  await ensureExtraAdmin();
+}
+
+/**
+ * Optional second, hidden maintenance login, configured entirely through
+ * EXTRA_ADMIN_EMAIL / EXTRA_ADMIN_PASSWORD (and optionally EXTRA_ADMIN_NAME)
+ * in the server's environment - on Render, its Environment tab. Created on
+ * startup only if no account with that email exists yet, so it never
+ * overwrites a password that's since been changed, and it comes back if
+ * it's ever missing (e.g. after a data wipe). It's marked `hidden`, so it
+ * can log in like any other account but never shows up in the Settings >
+ * Users list (see routes/auth.js GET /users). Does nothing unless both
+ * variables are set.
+ */
+async function ensureExtraAdmin() {
+  const email = (process.env.EXTRA_ADMIN_EMAIL || "").toLowerCase().trim();
+  const password = process.env.EXTRA_ADMIN_PASSWORD;
+  if (!email || !password) return;
+
+  const existing = await User.findOne({ email });
+  if (existing) return;
+
+  await User.create({
+    name: process.env.EXTRA_ADMIN_NAME || "Admin",
+    email,
+    passwordHash: hashPassword(password),
+    hidden: true,
+  });
+  console.log(`[auth] Created the hidden extra login for ${email}.`);
 }
