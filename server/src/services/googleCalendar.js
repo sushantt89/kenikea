@@ -123,6 +123,10 @@ function jobDetailLines(description) {
   const lines = [];
   for (const item of descriptionBullets(description)) {
     if (/^Charges total:/i.test(item)) continue;
+    // "Must commit to attend: ..." is an IKEA-side deadline for the admin,
+    // not an instruction for the worker - on the invite it just confused
+    // people, so it's left off (it stays in job.description in the app).
+    if (/^Must commit to attend:/i.test(item)) continue;
     const productsMatch = item.match(/^Products:\s*(.+)$/i);
     if (productsMatch) {
       const products = productsMatch[1]
@@ -281,7 +285,8 @@ export async function createAssignmentEvent(job, team, options = {}) {
   const summary = formatAssignedTitle(
     job.title,
     invitable.map((w) => w.name),
-    job.customer
+    job.customer,
+    options.payoutView?.amount
   );
 
   try {

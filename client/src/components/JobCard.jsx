@@ -713,21 +713,6 @@ export default function JobCard({ job, onChange, highlighted }) {
             </table>
             </div>
           )}
-          {ranking.excluded.length > 0 && (
-            <div className="excluded-list">
-              <p className="muted small excluded-list-title">
-                Excluded ({ranking.excluded.length})
-              </p>
-              <ul className="excluded-list-items">
-                {ranking.excluded.map((e) => (
-                  <li key={e.workerId}>
-                    <span className="excluded-list-name">{e.name}</span>
-                    <span className="excluded-list-reason">{e.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
       <FortnightModal worker={openCandidate} onClose={() => setOpenCandidate(null)} onSaved={handleCandidateAvailabilitySaved} />

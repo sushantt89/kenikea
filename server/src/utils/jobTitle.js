@@ -58,8 +58,12 @@ export function splitJobTitle(title) {
  * yet.
  * @param {object} [customer] - job.customer ({name, phone, email}) -
  *   only name and phone are ever used here.
+ * @param {number} [payout] - when given, shown right next to the job id
+ *   ("(698932 · $52)") - used only for calendar invite titles, so a worker
+ *   sees what the job pays at a glance. Omitted everywhere else (Jobs list,
+ *   notifications), which keeps the plain "(698932)" format.
  */
-export function formatAssignedTitle(title, workerNames, customer) {
+export function formatAssignedTitle(title, workerNames, customer, payout) {
   const names = (workerNames || []).filter(Boolean);
   const { jobId } = splitJobTitle(title);
   const customerName = (customer?.name || "").trim();
@@ -73,7 +77,12 @@ export function formatAssignedTitle(title, workerNames, customer) {
   if (!jobId && !customerPart && names.length === 0) return title || "";
 
   const who = names.length > 0 ? names.join(" + ") : "Unassigned";
-  const idPart = jobId ? ` (${jobId})` : "";
+  const hasPayout = payout != null && Number.isFinite(Number(payout));
+  const payoutText = hasPayout
+    ? `$${Number.isInteger(Number(payout)) ? Number(payout) : Number(payout).toFixed(2)}`
+    : "";
+  const idInner = [jobId, payoutText].filter(Boolean).join(" \u00b7 ");
+  const idPart = idInner ? ` (${idInner})` : "";
   const lead = `${who}${idPart}`;
   return customerPart ? `${lead} - ${customerPart}` : lead;
 }
