@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext.jsx";
 import { useTheme } from "../theme/ThemeContext.jsx";
 import { getUsers, createUser, deleteUser, forgotPassword } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
+import InstallApp from "../components/InstallApp.jsx";
 
 const EMPTY_FORM = { name: "", email: "", password: "", confirmPassword: "" };
 
@@ -114,6 +115,8 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      <InstallApp />
 
       <div className="card settings-section">
         <h2>Password</h2>

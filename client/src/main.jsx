@@ -6,6 +6,17 @@ import { AuthProvider } from "./auth/AuthContext.jsx";
 import { ThemeProvider } from "./theme/ThemeContext.jsx";
 import { ToastProvider } from "./toast/ToastContext.jsx";
 import "./styles.css";
+// Imported for its side effect: starts listening for the browser's "app is
+// installable" event right at page load (see utils/pwaInstall.js).
+import "./utils/pwaInstall.js";
+
+// Registers the (cache-free) service worker that makes the app installable.
+// Production builds only, so local dev isn't affected.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
