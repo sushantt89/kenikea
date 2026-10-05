@@ -143,10 +143,9 @@ function JobDescriptionView({ description }) {
             if (e.depth === 0 || groups.length === 0) groups.push({ text: e.text, subs: [] });
             else groups[groups.length - 1].subs.push(e.text);
           }
-          const count = entries.filter((e) => /^\d+\s*x\s/i.test(e.text)).length || entries.length;
           return (
             <div key={i} className="job-description-products">
-              <span className="job-description-label">Products ({count}):</span>
+              <span className="job-description-label">Products:</span>
               <ul>
                 {groups.map((g, j) => (
                   <li key={j}>

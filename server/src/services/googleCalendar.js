@@ -160,8 +160,7 @@ function jobDetailLines(description) {
         .split(";")
         .map((p) => p.trim())
         .filter(Boolean);
-      const count = products.filter((p) => /^(?:>\s*)*\d+\s*x\s/i.test(p)).length || products.length;
-      lines.push(`Products (${count}):`);
+      lines.push("Products:");
       const parsed = products.map((p) => ({
         depth: (p.match(/^(?:>\s*)*/)[0].match(/>/g) || []).length,
         text: p.replace(/^(?:>\s*)*/, ""),
