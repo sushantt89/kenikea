@@ -105,6 +105,18 @@ function splitDescriptionFacts(text) {
 // "Products: A; B; C", which becomes its own bulleted list (group
 // sub-items nested) instead of one line with a dozen-plus items crammed
 // together separated by semicolons.
+// Like the job page: the note in brackets after a product code, e.g.
+// "1 x 70616561 (2 pkgs) - ...", is shown italic.
+function ItemText({ text }) {
+  const m = text.match(/^(\d+\s*x\s[^(]*?)\(([^)]*)\)(.*)$/i);
+  if (!m) return text;
+  return (
+    <>
+      {m[1]}(<em>{m[2]}</em>){m[3]}
+    </>
+  );
+}
+
 function JobDescriptionView({ description }) {
   const facts = splitDescriptionFacts(description);
   if (facts.length === 0) return null;
@@ -138,11 +150,13 @@ function JobDescriptionView({ description }) {
               <ul>
                 {groups.map((g, j) => (
                   <li key={j}>
-                    {g.text}
+                    {g.subs.length > 0 ? <strong>{g.text}</strong> : <ItemText text={g.text} />}
                     {g.subs.length > 0 && (
                       <ul>
                         {g.subs.map((t, k) => (
-                          <li key={k}>{t}</li>
+                          <li key={k}>
+                            <ItemText text={t} />
+                          </li>
                         ))}
                       </ul>
                     )}

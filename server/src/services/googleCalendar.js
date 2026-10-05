@@ -106,6 +106,29 @@ function descriptionBullets(text) {
     .filter((s) => !/^customer:/i.test(s));
 }
 
+// A line starting with this (never visible - it's stripped in
+// formatDescriptionHtml) is shown bold in the calendar description.
+const BOLD_MARK = "\u0001";
+
+const escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Google Calendar descriptions can contain basic HTML (<b>, <br>, ...), and
+// plain text can't be bold - so the finished description is written as
+// HTML: every line HTML-escaped, joined with <br>, group headings in <b>.
+function formatDescriptionHtml(lines) {
+  return lines
+    .map((line) => {
+      if (line.startsWith(BOLD_MARK)) return `<b>${escapeHtml(line.slice(1))}</b>`;
+      const html = escapeHtml(line);
+      // Like the job page: the note in brackets after a product code,
+      // e.g. "1 x 70616561 (2 pkgs) - ...", is italic.
+      return /^[\u00a0]*[\u2022\u25e6] \d+ x /.test(line)
+        ? html.replace(/\(([^)]*)\)/, "(<i>$1</i>)")
+        : html;
+    })
+    .join("<br>");
+}
+
 /**
  * Turns each fact from descriptionBullets() into a calendar line - almost
  * always one bullet per fact, EXCEPT "Products: A; B; C", which gets
@@ -139,11 +162,20 @@ function jobDetailLines(description) {
         .filter(Boolean);
       const count = products.filter((p) => /^(?:>\s*)*\d+\s*x\s/i.test(p)).length || products.length;
       lines.push(`Products (${count}):`);
-      for (const p of products) {
-        const depth = (p.match(/^(?:>\s*)*/)[0].match(/>/g) || []).length;
-        const text = p.replace(/^(?:>\s*)*/, "");
-        lines.push(depth > 0 ? `${"\u00a0".repeat(4 * depth)}\u25e6 ${text}` : `\u2022 ${text}`);
-      }
+      const parsed = products.map((p) => ({
+        depth: (p.match(/^(?:>\s*)*/)[0].match(/>/g) || []).length,
+        text: p.replace(/^(?:>\s*)*/, ""),
+      }));
+      parsed.forEach((e, i) => {
+        if (e.depth > 0) {
+          lines.push(`${"\u00a0".repeat(4 * e.depth)}\u25e6 ${e.text}`);
+        } else if (parsed[i + 1] && parsed[i + 1].depth > 0) {
+          // A group heading (it has sub-items) - bold, like on the job page.
+          lines.push(`${BOLD_MARK}\u2022 ${e.text}`);
+        } else {
+          lines.push(`\u2022 ${e.text}`);
+        }
+      });
     } else {
       lines.push(`• ${item}`);
     }
@@ -216,7 +248,7 @@ function buildDescription(job, team, payoutView) {
   // worker needs to see on their calendar invite.
   pushSection(lines, null, [`Assigned team: ${team.map((w) => w.name).join(", ")}`]);
 
-  return lines.join("\n");
+  return formatDescriptionHtml(lines);
 }
 
 /**
