@@ -102,9 +102,9 @@ function splitDescriptionFacts(text) {
 }
 
 // Renders job.description as a short list of facts, one per line - except
-// "Products: A; B; C", which becomes its own numbered list (1. A, 2. B,
-// 3. C, ...) instead of one line with a dozen-plus items crammed together
-// separated by semicolons.
+// "Products: A; B; C", which becomes its own bulleted list (group
+// sub-items nested) instead of one line with a dozen-plus items crammed
+// together separated by semicolons.
 function JobDescriptionView({ description }) {
   const facts = splitDescriptionFacts(description);
   if (facts.length === 0) return null;
@@ -114,18 +114,41 @@ function JobDescriptionView({ description }) {
       {facts.map((fact, i) => {
         const productsMatch = fact.match(/^Products:\s*(.+)$/i);
         if (productsMatch) {
-          const products = productsMatch[1]
+          // Items exactly as the job page lists them: a group heading with
+          // its sub-items nested under it as a bulleted sub-list. The
+          // scraper marks each sub-item with "> " (one per level) - see
+          // SUB_ITEM_MARKER in server/src/services/scraper.js.
+          const entries = productsMatch[1]
             .split(";")
             .map((p) => p.trim())
-            .filter(Boolean);
+            .filter(Boolean)
+            .map((p) => ({
+              depth: (p.match(/^(?:>\s*)*/)[0].match(/>/g) || []).length,
+              text: p.replace(/^(?:>\s*)*/, ""),
+            }));
+          const groups = [];
+          for (const e of entries) {
+            if (e.depth === 0 || groups.length === 0) groups.push({ text: e.text, subs: [] });
+            else groups[groups.length - 1].subs.push(e.text);
+          }
+          const count = entries.filter((e) => /^\d+\s*x\s/i.test(e.text)).length || entries.length;
           return (
             <div key={i} className="job-description-products">
-              <span className="job-description-label">Products ({products.length}):</span>
-              <ol>
-                {products.map((p, j) => (
-                  <li key={j}>{p}</li>
+              <span className="job-description-label">Products ({count}):</span>
+              <ul>
+                {groups.map((g, j) => (
+                  <li key={j}>
+                    {g.text}
+                    {g.subs.length > 0 && (
+                      <ul>
+                        {g.subs.map((t, k) => (
+                          <li key={k}>{t}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
                 ))}
-              </ol>
+              </ul>
             </div>
           );
         }

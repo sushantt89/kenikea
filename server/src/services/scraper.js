@@ -597,17 +597,17 @@ function draftFromBeehiiveHtml(html, url) {
   const scheduledStart = parseExpectedDate(text, timezoneForWorkArea(workArea));
   const commitTime = parseCommitTime(html);
 
-  const productLis = [...html.matchAll(/<li>\s*([\s\S]*?)\s*<\/li>/gi)].map((m) => stripHtml(m[1]));
-  // Tidy up spacing left behind by stripping inline tags like <em> out of
-  // things like "60616849 (<em>2 pkgs</em>) -" -> "60616849 ( 2 pkgs ) -".
-  const products = cleanProductList(productLis).map((p) => p.replace(/\(\s+/g, "(").replace(/\s+\)/g, ")"));
+  // Items exactly as the page lists them, including group headings with
+  // their nested sub-items - see parseProductList().
+  const products = parseProductList(html);
+  const productCount = countProductLines(products);
 
   const isSecureIt = /secure\s*it/i.test(text);
   const isOverdue = /overdue/i.test(text);
 
   let difficulty = difficultyFromMinutes(allocatedMinutes);
   if (isSecureIt) difficulty = bumpTier(difficulty);
-  if (products.length >= 6) difficulty = bumpTier(difficulty);
+  if (productCount >= 6) difficulty = bumpTier(difficulty);
 
   // Matches "Total 75.11 NZD" as well as "Total 36.05 AUD" - a job in
   // Auckland (see utils/workAreas.js) is charged in NZD, and this used to
@@ -919,6 +919,109 @@ function pickShortTitle(descriptionArr) {
   );
   if (!candidates.length) return "";
   return candidates.sort((a, b) => a.length - b.length)[0].trim();
+}
+
+// Marker the scraper puts in front of a sub-item (one per nesting level)
+// inside the "Products: A; B; C" description fact, e.g.
+// "Products: BESTÅ T10 ...; > 1 x 70616561 - ...; > 3 x 70352683 - ...;
+// 1 x 30617303 - KULLEN ...". The calendar invite and the job card read it
+// back to draw nested bullets (see parseProductEntry below / the same logic
+// in client/src/components/JobCard.jsx).
+const SUB_ITEM_MARKER = "> ";
+
+// A line that is an actual product ("3 x 70352683 - ..."), as opposed to a
+// group heading like "BESTÅ T10 180x42x38 whi/Hedeviken oak ven AU".
+function isProductLine(text) {
+  return /^(?:>\s*)*\d+\s*x\s/i.test(text.trim());
+}
+
+function countProductLines(entries) {
+  return entries.filter(isProductLine).length;
+}
+
+/**
+ * Reads the job page's item list(s) the way the page shows them: every
+ * <ul> that contains at least one "N x code - name" line is kept whole,
+ * INCLUDING group headings with nested sub-lists, e.g.
+ *   <li><strong>BESTÅ T10 ...</strong><ul><li>1 x 7061 ...</li></ul></li>
+ * which comes back as ["BESTÅ T10 ...", "> 1 x 7061 ...", ...] - sub-items
+ * carry one "> " per level. (The old code grabbed every plain <li> with a
+ * single regex, which dropped group headings and swallowed the first
+ * sub-item of every group.) Other lists on the page (navigation, etc.)
+ * never contain an "N x" line, so they're ignored.
+ */
+function parseProductList(html) {
+  const tokenRe = /<(\/?)(ul|ol|li)\b[^>]*>/gi;
+  const clean = (t) =>
+    stripHtml(t)
+      .replace(/\(\s+/g, "(")
+      .replace(/\s+\)/g, ")")
+      .trim();
+
+  // Build a tree: lists -> items -> (own text, child lists).
+  const root = { children: [] };
+  const stack = [root]; // containers: root, or list nodes, or item nodes
+  let lastIndex = 0;
+  let m;
+  const addText = (to) => {
+    const node = stack[stack.length - 1];
+    if (node.type === "item" && !node.sawChildList) node.rawText += html.slice(lastIndex, to);
+  };
+  while ((m = tokenRe.exec(html))) {
+    addText(m.index);
+    lastIndex = tokenRe.lastIndex;
+    const closing = m[1] === "/";
+    const tag = m[2].toLowerCase();
+    const top = stack[stack.length - 1];
+    if (!closing && (tag === "ul" || tag === "ol")) {
+      const list = { type: "list", ordered: tag === "ol", children: [] };
+      top.children.push(list);
+      if (top.type === "item") top.sawChildList = true;
+      stack.push(list);
+    } else if (!closing && tag === "li") {
+      // Tolerate a missing </li> before the next <li>.
+      if (top.type === "item") stack.pop();
+      const parent = stack[stack.length - 1];
+      const item = { type: "item", rawText: "", children: [], sawChildList: false };
+      if (parent.children) parent.children.push(item);
+      stack.push(item);
+    } else if (closing && tag === "li") {
+      while (stack.length > 1 && stack[stack.length - 1].type !== "item") stack.pop();
+      if (stack.length > 1) stack.pop();
+    } else if (closing) {
+      while (stack.length > 1 && stack[stack.length - 1].type === "item") stack.pop();
+      if (stack.length > 1) stack.pop();
+    }
+  }
+
+  const hasProductLine = (node) =>
+    node.type === "item"
+      ? isProductLine(clean(node.rawText)) || node.children.some(hasProductLine)
+      : node.children.some(hasProductLine);
+
+  const out = [];
+  const walk = (list, depth) => {
+    for (const item of list.children) {
+      if (item.type !== "item") continue;
+      const text = clean(item.rawText);
+      if (text) out.push(`${SUB_ITEM_MARKER.repeat(depth)}${text}`);
+      for (const child of item.children) if (child.type === "list") walk(child, depth + 1);
+    }
+  };
+  // Only top-level lists that actually hold product lines.
+  const topLists = [];
+  const collect = (node) => {
+    for (const child of node.children) {
+      if (child.type === "list") topLists.push(child);
+      else if (child.type === "item") collect(child);
+    }
+  };
+  collect(root);
+  for (const list of topLists) {
+    if (!hasProductLine(list)) continue;
+    walk(list, 0);
+  }
+  return out;
 }
 
 function cleanProductList(products) {

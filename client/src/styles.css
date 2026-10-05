@@ -938,9 +938,14 @@ table {
   font-weight: 600;
 }
 
-.job-description-products ol {
+.job-description-products ul {
   margin: 4px 0 0;
   padding-left: 22px;
+}
+
+.job-description-products ul ul {
+  margin-top: 2px;
+  list-style: circle;
 }
 
 .job-description-products li {

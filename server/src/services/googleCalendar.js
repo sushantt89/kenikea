@@ -109,7 +109,8 @@ function descriptionBullets(text) {
 /**
  * Turns each fact from descriptionBullets() into a calendar line - almost
  * always one bullet per fact, EXCEPT "Products: A; B; C", which gets
- * exploded into its own numbered list (1. A, 2. B, 3. C, ...) instead of
+ * exploded into its own bulleted list (with a group's sub-items nested
+ * under it) instead of
  * one bullet with a dozen-plus items crammed onto a single semicolon-joined
  * line. Much easier to actually read on a job with a long parts list.
  *
@@ -129,12 +130,20 @@ function jobDetailLines(description) {
     if (/^Must commit to attend:/i.test(item)) continue;
     const productsMatch = item.match(/^Products:\s*(.+)$/i);
     if (productsMatch) {
+      // Items exactly as the job page lists them: top-level items as "•"
+      // bullets, a group's sub-items (marked "> " by the scraper - see
+      // SUB_ITEM_MARKER in scraper.js) as indented "◦" bullets under it.
       const products = productsMatch[1]
         .split(";")
         .map((p) => p.trim())
         .filter(Boolean);
-      lines.push(`Products (${products.length}):`);
-      products.forEach((p, i) => lines.push(`${i + 1}. ${p}`));
+      const count = products.filter((p) => /^(?:>\s*)*\d+\s*x\s/i.test(p)).length || products.length;
+      lines.push(`Products (${count}):`);
+      for (const p of products) {
+        const depth = (p.match(/^(?:>\s*)*/)[0].match(/>/g) || []).length;
+        const text = p.replace(/^(?:>\s*)*/, "");
+        lines.push(depth > 0 ? `${"\u00a0".repeat(4 * depth)}\u25e6 ${text}` : `\u2022 ${text}`);
+      }
     } else {
       lines.push(`• ${item}`);
     }
@@ -158,7 +167,7 @@ function pushSection(lines, title, items) {
 
 /**
  * Same as pushSection, but for lines that are already fully formatted
- * (e.g. jobDetailLines()'s numbered product sub-list) - pushed as-is
+ * (e.g. jobDetailLines()'s nested item bullets) - pushed as-is
  * rather than auto-prefixed with "• ".
  */
 function pushRawSection(lines, title, rawLines) {
@@ -170,7 +179,7 @@ function pushRawSection(lines, title, rawLines) {
 
 /**
  * Builds one calendar event's description: the job's own scraped/typed
- * details (numbered product list included), a separate Customer section,
+ * details (bulleted item list included), a separate Customer section,
  * a Pay section, then the assigned team and source link - each section
  * visually separated by a blank line so it reads as distinct blocks rather
  * than one run-on wall of text.
