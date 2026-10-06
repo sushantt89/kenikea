@@ -120,21 +120,20 @@ export default function JobsChart({ jobs }) {
     const totalWorkerPayout = workerPayoutByCurrency.get(currency) || 0;
     // Profit is the SUM of each job's own profit, computed exactly like the
     // job card and the Excel export do (JobCard.jsx / Jobs.jsx
-    // formatForExport): the IKEA payout after GST minus what the workers
+    // formatForExport): the IKEA payout (before GST) minus what the workers
     // actually get - their entered payouts once every assigned worker has
     // one, otherwise the proposed worker payout as a stand-in. (This tile
     // used to be "proposed payout minus entered payout", which is the
     // saving versus the proposal, not profit, so it disagreed with every
     // job card.)
     const totalProfit = jobsForCurrency.reduce((sum, j) => {
-      const afterGst = j.pay?.afterGst;
-      if (afterGst == null) return sum;
+      if (j.chargesTotal == null) return sum;
       const assigned = j.assignedWorkers || [];
       const settled = assigned.length > 0 && assigned.every((a) => a.payout != null);
       const effectivePayout = settled
         ? assigned.reduce((t, a) => t + (Number(a.payout) || 0), 0)
         : Number(j.pay.adminPay || 0);
-      return sum + (afterGst - effectivePayout);
+      return sum + (Number(j.chargesTotal) - effectivePayout);
     }, 0);
     return { currency, totalIkea, totalAdmin, totalWorkerPayout, totalProfit };
   });

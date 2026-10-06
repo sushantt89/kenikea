@@ -117,7 +117,6 @@ function formatForExport(job) {
   const assignedWorkers = job.assignedWorkers || [];
   const totalPayout = assignedWorkers.reduce((sum, a) => sum + (Number(a.payout) || 0), 0);
   const adminPay = job.pay?.adminPay ?? null;
-  const afterGst = job.pay?.afterGst ?? null;
   // Same "estimate until every assigned worker's payout is actually saved"
   // rule as the on-screen Profit line in JobCard.jsx - see its own comment
   // for the full rationale. Kept in sync by hand since this export builds
@@ -147,7 +146,7 @@ function formatForExport(job) {
     "IKEA payout ($)": job.chargesTotal ?? "",
     "Proposed worker payout ($)": adminPay ?? "",
     "Worker payout total ($)": assignedWorkers.length ? totalPayout : "",
-    "Profit ($)": afterGst != null && effectivePayout != null ? afterGst - effectivePayout : "",
+    "Profit ($)": job.chargesTotal != null && effectivePayout != null ? job.chargesTotal - effectivePayout : "",
     "Customer name": job.customer?.name || "",
     "Customer phone": job.customer?.phone || "",
     "Customer email": job.customer?.email || "",

@@ -456,14 +456,10 @@ export default function JobCard({ job, onChange, highlighted }) {
   }
 
   const adminPay = job.pay?.adminPay ?? null;
-  const afterGst = job.pay?.afterGst ?? null;
   const totalPayout = assignedWorkers.reduce((sum, a) => sum + (Number(a.payout) || 0), 0);
-  // Profit is what the business actually keeps: the post-GST amount minus
-  // whatever workers are actually paid (see services/pay.js - adminPay
-  // itself, despite its name, is the PROPOSED worker payout shown in the
-  // UI above, not the business's own cut - the business's real, guaranteed
-  // margin is the other, complementary slice of afterGst: afterGst -
-  // adminPay, e.g. $9.00 - $6.75 = $2.25 on a $10 job).
+  // Profit = the IKEA payout (before GST) minus whatever workers are
+  // actually paid. (adminPay, despite its name, is the PROPOSED worker
+  // payout shown in the UI above - see services/pay.js.)
   //
   // Until every currently-assigned worker's payout is actually SAVED (by
   // clicking ASSIGN) there's no real "what workers are actually paid"
@@ -476,7 +472,7 @@ export default function JobCard({ job, onChange, highlighted }) {
   // eats into it (see the "(estimated ...)" note next to this line below).
   const settled = assignedWorkers.length > 0 && assignedWorkers.every((a) => a.payout != null);
   const effectivePayout = settled ? totalPayout : adminPay;
-  const profit = afterGst != null ? afterGst - effectivePayout : null;
+  const profit = job.chargesTotal != null && effectivePayout != null ? job.chargesTotal - effectivePayout : null;
   // This job's own currency - AUD for every Australian work area, NZD for
   // Auckland (see utils/workAreas.js). Every dollar figure below is for
   // THIS one job, so there's no cross-currency summing risk here (unlike
