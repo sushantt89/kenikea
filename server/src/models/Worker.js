@@ -97,4 +97,7 @@ const WorkerSchema = new Schema(
   { timestamps: true }
 );
 
+WorkerSchema.index({ createdAt: -1 });
+WorkerSchema.index({ workArea: 1, createdAt: -1 });
+
 export default mongoose.model("Worker", WorkerSchema);

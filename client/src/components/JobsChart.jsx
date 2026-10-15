@@ -116,7 +116,7 @@ export default function JobsChart({ jobs }) {
   const totalsByCurrency = currencies.map((currency) => {
     const jobsForCurrency = pricedJobs.filter((j) => currencyOf(j) === currency);
     const totalIkea = jobsForCurrency.reduce((sum, j) => sum + Number(j.chargesTotal || 0), 0);
-    const totalAdmin = jobsForCurrency.reduce((sum, j) => sum + Number(j.pay.adminPay || 0), 0);
+    const totalAdmin = jobsForCurrency.reduce((sum, j) => sum + Number(j.pay?.adminPay || 0), 0);
     const totalWorkerPayout = workerPayoutByCurrency.get(currency) || 0;
     // Profit is the SUM of each job's own profit, computed exactly like the
     // job card and the Excel export do (JobCard.jsx / Jobs.jsx
@@ -132,7 +132,7 @@ export default function JobsChart({ jobs }) {
       const settled = assigned.length > 0 && assigned.every((a) => a.payout != null);
       const effectivePayout = settled
         ? assigned.reduce((t, a) => t + (Number(a.payout) || 0), 0)
-        : Number(j.pay.adminPay || 0);
+        : Number(j.pay?.adminPay || 0);
       return sum + (Number(j.chargesTotal) - effectivePayout);
     }, 0);
     return { currency, totalIkea, totalAdmin, totalWorkerPayout, totalProfit };

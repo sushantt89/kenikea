@@ -9,36 +9,111 @@ import { sendEmail } from "../services/mailer.js";
 import { createFortnightForm, isConfigured as formCreationConfigured } from "../services/formManager.js";
 import { withParsedAvailability } from "../services/fortnightAvailability.js";
 import { WORK_AREAS } from "../utils/workAreas.js";
+import { JOB_SORT, parsePaging, pageOf, isObjectId } from "../services/jobQuery.js";
 
 const router = Router();
 
-// GET /api/workers - list all workers, with their current active job count
+// Checking for new fortnightly-form submissions reads a Google Sheet (slow),
+// so it runs in the background (throttled) instead of holding up the list.
+// A new submission shows up on the next load, and the navbar bell also runs
+// this same check (see routes/notifications.js).
+let lastAvailabilityRun = 0;
+let availabilityCheckRunning = false;
+function checkAvailabilityInBackground() {
+  if (availabilityCheckRunning || Date.now() - lastAvailabilityRun < 20 * 1000) return;
+  availabilityCheckRunning = true;
+  lastAvailabilityRun = Date.now();
+  checkNewAvailabilitySubmissions()
+    .catch((err) => console.error("[workers] availability check failed:", err.message))
+    .finally(() => {
+      availabilityCheckRunning = false;
+    });
+}
+
+// Adds the parsed availability and the current active job count to workers.
+// The count only looks at jobs of the given workers.
+async function withJobCounts(workers) {
+  const ids = workers.map((w) => w._id);
+  const activeJobs = ids.length
+    ? await Job.find({ status: "Assigned", "assignedWorkers.worker": { $in: ids } })
+        .select("assignedWorkers.worker")
+        .lean()
+    : [];
+
+  const countByWorker = new Map();
+  for (const job of activeJobs) {
+    for (const a of job.assignedWorkers || []) {
+      const key = String(a.worker);
+      countByWorker.set(key, (countByWorker.get(key) || 0) + 1);
+    }
+  }
+
+  return workers.map((w) => ({
+    ...w,
+    formAvailability: withParsedAvailability(w.formAvailability),
+    activeJobCount: countByWorker.get(String(w._id)) || 0,
+  }));
+}
+
+// GET /api/workers - the Workers list, most recent first, with each worker's
+// current active job count.
+//   With page/pageSize: one page -> { items, total, page, pageSize, pageCount }
+//     ?page=&pageSize=&workArea=(all|none|<area>)&focus=<worker id>
+//     `focus` is always included whatever the filter says and, when no page
+//     is given, the response is the page that worker is on.
+//   Without: every worker, as a plain array.
 router.get("/", async (req, res, next) => {
   try {
-    // Also catches any new fortnightly-form submission since this was
-    // last loaded, and notifies for it - see
-    // services/availabilitySync.js's checkNewAvailabilitySubmissions()
-    // (the navbar's notification bell triggers this same check from every
-    // page, not just here - see routes/notifications.js).
-    await checkNewAvailabilitySubmissions();
-    const workers = await Worker.find().sort({ createdAt: -1 }).lean();
-    const activeJobs = await Job.find({ status: "Assigned" }).lean();
+    checkAvailabilityInBackground();
 
-    const countByWorker = new Map();
-    for (const job of activeJobs) {
-      for (const a of job.assignedWorkers || []) {
-        const key = String(a.worker);
-        countByWorker.set(key, (countByWorker.get(key) || 0) + 1);
-      }
+    const paged = req.query.page !== undefined || req.query.pageSize !== undefined;
+    if (!paged) {
+      const workers = await Worker.find().sort({ createdAt: -1 }).lean();
+      return res.json(await withJobCounts(workers));
     }
 
-    const withCounts = workers.map((w) => ({
-      ...w,
-      formAvailability: withParsedAvailability(w.formAvailability),
-      activeJobCount: countByWorker.get(String(w._id)) || 0,
-    }));
+    const workArea = typeof req.query.workArea === "string" ? req.query.workArea.trim() : "";
+    const base =
+      workArea === "none"
+        ? { $or: [{ workArea: null }, { workArea: "" }] }
+        : WORK_AREAS.includes(workArea)
+          ? { workArea }
+          : {};
+    const focusId = isObjectId(req.query.focus) ? String(req.query.focus).trim() : null;
+    const filter = focusId ? { $or: [base, { _id: focusId }] } : base;
 
-    res.json(withCounts);
+    const { pageSize, page: requestedPage } = parsePaging(req.query, { defaultSize: 25 });
+    const total = await Worker.countDocuments(filter);
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+    let page = requestedPage;
+    if (page === null) {
+      page = 1;
+      if (focusId) {
+        const focused = await Worker.findById(focusId).select("createdAt");
+        if (focused) page = await pageOf(Worker, filter, focused, pageSize);
+      }
+    }
+    page = Math.min(page, pageCount);
+
+    const workers = await Worker.find(filter)
+      .sort(JOB_SORT)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean();
+
+    res.json({ items: await withJobCounts(workers), total, page, pageSize, pageCount });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/workers/options - id, name and work area of every worker, for
+// dropdowns (e.g. the Jobs page's worker filter) without loading full records.
+router.get("/options", async (req, res, next) => {
+  try {
+    const workers = await Worker.find().select("name workArea").sort({ name: 1 }).lean();
+    res.json(workers);
   } catch (err) {
     next(err);
   }

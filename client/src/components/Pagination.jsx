@@ -1,43 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-
 export const PAGE_SIZES = [10, 25, 50, 100];
-
-/**
- * Client-side pagination for an already filtered list. Goes back to page 1
- * whenever `resetKey` changes (pass something that changes with the
- * filters), and jumps to the page holding the item at `focusIndex` whenever
- * `focusKey` changes (e.g. a job opened from a notification) - so that item
- * is never hidden on another page.
- */
-export function usePagination(items, { initialPageSize = 25, resetKey = "", focusKey = null, focusIndex = -1 } = {}) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(initialPageSize);
-
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const safePage = Math.min(page, pageCount);
-
-  useEffect(() => {
-    setPage(1);
-  }, [resetKey, pageSize]);
-
-  const focusFound = focusIndex >= 0;
-  const focusIndexRef = useRef(focusIndex);
-  focusIndexRef.current = focusIndex;
-  useEffect(() => {
-    if (focusFound) setPage(Math.floor(focusIndexRef.current / pageSize) + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKey, focusFound]);
-
-  const start = (safePage - 1) * pageSize;
-  return {
-    pageItems: items.slice(start, start + pageSize),
-    page: safePage,
-    pageSize,
-    setPage,
-    setPageSize,
-    total: items.length,
-  };
-}
 
 // 1 ... 4 5 [6] 7 8 ... 20
 function pageNumbers(page, pageCount) {

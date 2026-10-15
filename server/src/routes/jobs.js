@@ -8,6 +8,7 @@ import { fillCoordinatesFromLocation, refreshCoordinatesOnUpdate } from "../serv
 import { computePay } from "../services/pay.js";
 import { WORK_AREAS } from "../utils/workAreas.js";
 import { checkCalendarDeclines } from "../services/declineSync.js";
+import { buildJobFilter, JOB_SORT, parsePaging, pageOf, isObjectId } from "../services/jobQuery.js";
 
 const router = Router();
 
@@ -47,17 +48,101 @@ async function archiveStaleJobs() {
   );
 }
 
-// GET /api/jobs - list all jobs, most recent first
+// Housekeeping that used to block every list load: archiving old jobs, and
+// catching workers who declined their calendar invite (which asks Google
+// Calendar about every assigned job - slow). Now throttled and run in the
+// background, so the list itself returns right away; a decline is picked up
+// by the next load (and by the navbar bell's own check - see
+// routes/notifications.js).
+let lastArchiveRun = 0;
+let lastDeclineRun = 0;
+let declineCheckRunning = false;
+
+async function maybeArchiveStaleJobs() {
+  if (Date.now() - lastArchiveRun < 10 * 60 * 1000) return;
+  lastArchiveRun = Date.now();
+  await archiveStaleJobs();
+}
+
+function checkDeclinesInBackground() {
+  if (declineCheckRunning || Date.now() - lastDeclineRun < 20 * 1000) return;
+  declineCheckRunning = true;
+  lastDeclineRun = Date.now();
+  checkCalendarDeclines()
+    .catch((err) => console.error("[jobs] decline check failed:", err.message))
+    .finally(() => {
+      declineCheckRunning = false;
+    });
+}
+
+// GET /api/jobs - the Jobs list, most recent first.
+//   With page/pageSize (the Jobs page): one page, filtered in the database:
+//     ?page=&pageSize=&search=&status=&workArea=&country=&worker=
+//      &archived=&dateFrom=&dateTo=&focus=
+//     -> { items, total, page, pageSize, pageCount, hasAnyJobs }
+//     `focus` (a job id) is always included whatever the filters say and,
+//     when no page is given, the response is the page that job is on.
+//   With all=1: every matching job (the Excel export) -> { items, total }.
+//   With neither: every job, as a plain array.
 router.get("/", async (req, res, next) => {
   try {
-    await archiveStaleJobs();
-    // Also catches any worker who's declined their calendar invite since
-    // the list was last loaded, and unassigns/notifies for it - see
-    // services/declineSync.js. (The navbar's notification bell triggers
-    // this same check from every page, not just here - see
-    // routes/notifications.js.)
-    await checkCalendarDeclines();
-    const jobs = await Job.find().sort({ createdAt: -1 }).populate("assignedWorkers.worker", WORKER_POPULATE);
+    await maybeArchiveStaleJobs();
+    checkDeclinesInBackground();
+
+    const paged = req.query.page !== undefined || req.query.pageSize !== undefined;
+    const all = req.query.all !== undefined;
+    if (!paged && !all) {
+      const jobs = await Job.find().sort({ createdAt: -1 }).populate("assignedWorkers.worker", WORKER_POPULATE);
+      return res.json(jobs);
+    }
+
+    const base = await buildJobFilter(req.query);
+    const focusId = isObjectId(req.query.focus) ? String(req.query.focus).trim() : null;
+    const filter = focusId ? { $or: [base, { _id: focusId }] } : base;
+
+    if (all) {
+      const items = await Job.find(filter).sort(JOB_SORT).populate("assignedWorkers.worker", WORKER_POPULATE);
+      return res.json({ items, total: items.length });
+    }
+
+    const { pageSize, page: requestedPage } = parsePaging(req.query, { defaultSize: 10 });
+    const total = await Job.countDocuments(filter);
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+    let page = requestedPage;
+    if (page === null) {
+      page = 1;
+      if (focusId) {
+        const focused = await Job.findById(focusId).select("createdAt");
+        if (focused) page = await pageOf(Job, filter, focused, pageSize);
+      }
+    }
+    page = Math.min(page, pageCount);
+
+    const items = await Job.find(filter)
+      .sort(JOB_SORT)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .populate("assignedWorkers.worker", WORKER_POPULATE);
+
+    const hasAnyJobs = total > 0 ? true : Boolean(await Job.exists({}));
+    res.json({ items, total, page, pageSize, pageCount, hasAnyJobs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/jobs/overview - just the few fields the Jobs page's overview
+// totals need, for EVERY job matching the same filters (so the totals cover
+// all of them, not only the shown page) without sending whole jobs.
+router.get("/overview", async (req, res, next) => {
+  try {
+    const base = await buildJobFilter(req.query);
+    const focusId = isObjectId(req.query.focus) ? String(req.query.focus).trim() : null;
+    const filter = focusId ? { $or: [base, { _id: focusId }] } : base;
+    const jobs = await Job.find(filter)
+      .select("status workArea chargesTotal pay.adminPay pay.afterGst assignedWorkers.payout")
+      .lean();
     res.json(jobs);
   } catch (err) {
     next(err);

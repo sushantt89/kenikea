@@ -95,6 +95,27 @@ export const rollOutForm = () => request("/workers/roll-out", { method: "POST" }
 
 // Jobs
 export const getJobs = () => request("/jobs");
+
+// Query string from a plain object, skipping empty values.
+function qs(params) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  }
+  const str = q.toString();
+  return str ? `?${str}` : "";
+}
+
+// One filtered page of jobs: { items, total, page, pageSize, pageCount, hasAnyJobs }.
+export const getJobsPage = (params) => request(`/jobs${qs(params)}`);
+// Every job matching the filters (for the Excel export): { items, total }.
+export const getJobsAll = (params) => request(`/jobs${qs({ ...params, all: 1 })}`);
+// Just the fields the overview totals need, for every matching job.
+export const getJobsOverview = (params) => request(`/jobs/overview${qs(params)}`);
+// One page of workers: { items, total, page, pageSize, pageCount }.
+export const getWorkersPage = (params) => request(`/workers${qs(params)}`);
+// [{ _id, name, workArea }] for dropdowns.
+export const getWorkerOptions = () => request("/workers/options");
 export const getJob = (id) => request(`/jobs/${id}`);
 export const scrapeJobLink = (url) =>
   request("/jobs/scrape", { method: "POST", body: JSON.stringify({ url }) });

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import JobCard from "../components/JobCard.jsx";
 import JobsChart from "../components/JobsChart.jsx";
-import Pagination, { usePagination } from "../components/Pagination.jsx";
-import { getJobs, getWorkers } from "../api.js";
+import Pagination from "../components/Pagination.jsx";
+import { getJobsPage, getJobsAll, getJobsOverview, getWorkerOptions } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
 import { WORK_AREAS, timezoneForWorkArea, countryForWorkArea, currencyForWorkArea } from "../utils/workAreas.js";
 import { formatInZone } from "../utils/timezone.js";
@@ -27,16 +27,6 @@ const STATUSES = ["Unassigned", "Assigned", "Completed"];
 // utils/workAreas.js's countryForWorkArea() - derived from WORK_AREAS so
 // this never drifts out of sync with it.
 const COUNTRIES = [...new Set(WORK_AREAS.map(countryForWorkArea))];
-
-// The date a job "happened" on, for filtering purposes - its scheduled time
-// when known, otherwise falls back to when it was created (e.g. a job
-// that's never had a time set yet still shows up under "today" once added).
-function jobDate(job) {
-  const raw = job.scheduledStart || job.createdAt;
-  if (!raw) return null;
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 // [start, end) for the given preset, in local time. Week runs Mon-Sun.
 function periodRange(period) {
@@ -88,32 +78,6 @@ function customRange(startStr, endStr) {
   return [start, end];
 }
 
-// One lowercased blob of everything a user might plausibly search a job
-// by - the job's title (which already includes its IKEA "Job 123456" id,
-// see scraper.js), its own Mongo id (in case that gets pasted instead),
-// location, work area, status, description, customer details, and any
-// assigned workers' names. Built fresh per job on each search rather than
-// memoized per-job - the job lists here are small enough (an admin tool's
-// worth of jobs, not a consumer-scale table) that this is unmeasurable.
-function jobSearchText(job) {
-  const assignedNames = (job.assignedWorkers || []).map((a) => a.worker?.name).filter(Boolean);
-  return [
-    job.title,
-    job._id,
-    job.location,
-    job.workArea,
-    job.status,
-    job.description,
-    job.customer?.name,
-    job.customer?.phone,
-    job.customer?.email,
-    ...assignedNames,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
 function formatForExport(job) {
   const assignedWorkers = job.assignedWorkers || [];
   const totalPayout = assignedWorkers.reduce((sum, a) => sum + (Number(a.payout) || 0), 0);
@@ -156,12 +120,20 @@ function formatForExport(job) {
 
 export default function Jobs() {
   const { showToast } = useToast();
+  // One page of (server-filtered) jobs at a time - see GET /api/jobs.
   const [jobs, setJobs] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [hasAnyJobs, setHasAnyJobs] = useState(true);
+  // Light version of EVERY matching job, just for the overview totals.
+  const [overviewJobs, setOverviewJobs] = useState(null);
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Bumped to re-fetch the current page (e.g. after saving a payout).
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [period, setPeriod] = useState("all");
   // Only used while period === "custom" - see customRange() above.
   const [customStart, setCustomStart] = useState("");
@@ -175,20 +147,18 @@ export default function Jobs() {
   // field for how a job gets into that state (auto after 6 months, or by
   // hand via the Archive button on its card).
   const [archivedFilter, setArchivedFilter] = useState("active");
+  const [pageSize, setPageSize] = useState(10);
 
   // Set when this page was opened from a notification bell click (see
   // components/NotificationBell.jsx), e.g. "/jobs?focus=<jobId>" - that one
-  // job is always shown regardless of every other filter above (see
-  // filteredJobs below) and gets scrolled into view + a highlight outline
-  // (see the "job-card-highlighted" class). Kept in its own piece of state
-  // (rather than just reading searchParams directly wherever it's needed)
-  // so it survives the "focus" param being stripped back out of the URL
-  // right below - done purely so the URL bar itself looks clean/shareable,
-  // and a later reload of the same URL doesn't re-focus forever. Watching
-  // searchParams itself (not a one-time-on-mount read) is what lets a
-  // SECOND notification click work correctly even while already sitting on
-  // this page - Jobs.jsx doesn't remount just because the query string
-  // changed, so a one-time read would miss it.
+  // job is always included regardless of every other filter above (the
+  // server adds it to the results) and the page holding it is opened, then
+  // it's scrolled into view + highlighted (see "job-card-highlighted").
+  // Kept in its own piece of state so it survives the "focus" param being
+  // stripped back out of the URL right below - done purely so the URL bar
+  // looks clean/shareable and a later reload doesn't re-focus forever.
+  // Watching searchParams itself (not a one-time-on-mount read) is what lets
+  // a SECOND notification click work while already sitting on this page.
   const [searchParams, setSearchParams] = useSearchParams();
   const [focusJobId, setFocusJobId] = useState(() => searchParams.get("focus"));
 
@@ -201,74 +171,17 @@ export default function Jobs() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  // `loading` gates the very first render (a full-page "Loading jobs..."
-  // placeholder while there's nothing to show yet). Every later reload -
-  // e.g. the one JobCard triggers via onChange right after you save a
-  // payout - reuses this same function, but must NOT flip `loading` back
-  // to true: doing that used to unmount the whole job list (scroll
-  // position included) just to briefly show that placeholder again before
-  // re-rendering the fresh data. hasLoadedOnce tracks that distinction
-  // with a ref (not state) since it doesn't need to trigger a render of
-  // its own - once true, later loadAll() calls just swap in new data
-  // without ever touching `loading`, so the list stays mounted and the
-  // page doesn't jump back to the top.
-  const hasLoadedOnce = useRef(false);
-
-  async function loadAll() {
-    if (!hasLoadedOnce.current) setLoading(true);
-    setError("");
-    try {
-      const [jobsData, workersData] = await Promise.all([getJobs(), getWorkers()]);
-      setJobs(jobsData);
-      setWorkers(workersData);
-      hasLoadedOnce.current = true;
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  // Wait for a pause in typing before asking the server to search.
   useEffect(() => {
-    loadAll();
-  }, []);
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filteredJobs = useMemo(() => {
-    const range = period === "custom" ? customRange(customStart, customEnd) : periodRange(period);
-    const query = search.trim().toLowerCase();
-    return jobs.filter((job) => {
-      // A job opened via a notification bell click always shows, no matter
-      // what the filters above are currently set to - see focusJobId above.
-      if (focusJobId && job._id === focusJobId) return true;
-      if (query && !jobSearchText(job).includes(query)) return false;
-      if (range) {
-        const d = jobDate(job);
-        if (!d || d < range[0] || d >= range[1]) return false;
-      }
-      const assignedWorkers = job.assignedWorkers || [];
-      if (workerFilter === "unassigned") {
-        if (assignedWorkers.length > 0) return false;
-      } else if (workerFilter !== "all") {
-        if (!assignedWorkers.some((a) => (a.worker?._id || a.worker) === workerFilter)) return false;
-      }
-      if (statusFilter !== "all" && job.status !== statusFilter) return false;
-      if (workAreaFilter === "none") {
-        if (job.workArea) return false;
-      } else if (workAreaFilter !== "all") {
-        if (job.workArea !== workAreaFilter) return false;
-      }
-      if (countryFilter !== "all" && countryForWorkArea(job.workArea) !== countryFilter) return false;
-      // "all" shows both active and archived jobs together - "active" and
-      // "archived" each show only their own.
-      if (archivedFilter === "archived") {
-        if (!job.archived) return false;
-      } else if (archivedFilter === "active") {
-        if (job.archived) return false;
-      }
-      return true;
-    });
-  }, [
-    jobs,
+  // Everything that changes WHICH jobs match. The page number belongs to one
+  // such combination: change any filter (or the page size) and it's page 1
+  // again.
+  const filterKey = [
+    debouncedSearch,
     period,
     customStart,
     customEnd,
@@ -277,46 +190,133 @@ export default function Jobs() {
     workAreaFilter,
     countryFilter,
     archivedFilter,
-    focusJobId,
-    search,
-  ]);
-
-  // Only one page of job cards is rendered at a time (they're heavy) - the
-  // overview above and the Excel export still cover every filtered job.
-  const focusIndex = useMemo(
-    () => (focusJobId ? filteredJobs.findIndex((j) => j._id === focusJobId) : -1),
-    [filteredJobs, focusJobId]
-  );
-  const {
-    pageItems: pageJobs,
-    page,
     pageSize,
-    setPage,
-    setPageSize,
-    total: totalJobs,
-  } = usePagination(filteredJobs, {
-    initialPageSize: 10,
-    resetKey: [search, period, customStart, customEnd, workerFilter, statusFilter, workAreaFilter, countryFilter, archivedFilter].join("|"),
-    focusKey: focusJobId,
-    focusIndex,
-  });
+  ].join("|");
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 });
+  const page = pageState.key === filterKey ? pageState.page : 1;
+  function setPage(p) {
+    setPageState({ key: filterKey, page: p });
+  }
 
-  // Scrolls the focused job's card into view once it's actually in the
-  // (post-filter) list and on the shown page - see focusJobId above.
+  // The filters as the server's query string. Dates are worked out here (in
+  // the browser's local time) and sent as exact instants.
+  function filterParams() {
+    const range = period === "custom" ? customRange(customStart, customEnd) : periodRange(period);
+    const params = {
+      search: debouncedSearch,
+      worker: workerFilter,
+      status: statusFilter,
+      workArea: workAreaFilter,
+      country: countryFilter,
+      archived: archivedFilter,
+    };
+    if (range) {
+      if (range[0].getTime() > 0) params.dateFrom = range[0].toISOString();
+      if (range[1].getFullYear() < 3000) params.dateTo = range[1].toISOString();
+    }
+    return params;
+  }
+
+  // Fetches the current page. `loading` gates only the very first render (a
+  // full-page "Loading jobs..." placeholder); every later fetch - a filter
+  // change, another page, the reload JobCard triggers after saving a payout
+  // - just swaps in the new data, so the list stays mounted and the scroll
+  // position isn't lost.
+  const hasLoadedOnce = useRef(false);
+  const latestRequest = useRef(0);
+  // Signature of a fetch we've already satisfied (skips an identical repeat).
+  const skipSig = useRef("");
+  // True while the focused job's page still has to be looked up by the server.
+  const focusPending = useRef(Boolean(focusJobId));
+  const lastFocus = useRef(focusJobId);
+  if (lastFocus.current !== focusJobId) {
+    lastFocus.current = focusJobId;
+    focusPending.current = Boolean(focusJobId);
+  }
+
+  useEffect(() => {
+    const params = filterParams();
+    if (focusJobId) params.focus = focusJobId;
+    const sigFor = (p) => JSON.stringify([params, pageSize, p, refreshTick]);
+    const askedPage = focusPending.current ? null : page;
+    if (askedPage !== null && skipSig.current === sigFor(askedPage)) return;
+
+    const requestId = ++latestRequest.current;
+    if (!hasLoadedOnce.current) setLoading(true);
+    setError("");
+    getJobsPage({ ...params, pageSize, ...(askedPage !== null ? { page: askedPage } : {}) })
+      .then((data) => {
+        if (requestId !== latestRequest.current) return;
+        setJobs(data.items);
+        setTotal(data.total);
+        setHasAnyJobs(data.hasAnyJobs);
+        hasLoadedOnce.current = true;
+        focusPending.current = false;
+        // The server may have picked a different page than asked (the
+        // focused job's page, or the last page after jobs were removed).
+        if (data.page !== askedPage) {
+          skipSig.current = sigFor(data.page);
+          setPageState({ key: filterKey, page: data.page });
+        }
+      })
+      .catch((err) => {
+        if (requestId === latestRequest.current) setError(err.message);
+      })
+      .finally(() => {
+        if (requestId === latestRequest.current) setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, page, refreshTick, focusJobId]);
+
+  // The overview totals cover every matching job, not only the shown page.
+  useEffect(() => {
+    const params = filterParams();
+    if (focusJobId) params.focus = focusJobId;
+    let cancelled = false;
+    getJobsOverview(params)
+      .then((data) => {
+        if (!cancelled) setOverviewJobs(data);
+      })
+      .catch(() => {
+        // the list's own error banner already covers a failing server
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, refreshTick, focusJobId]);
+
+  // Worker names for the filter dropdown.
+  useEffect(() => {
+    getWorkerOptions()
+      .then(setWorkers)
+      .catch(() => {});
+  }, []);
+
+  function loadAll() {
+    setRefreshTick((t) => t + 1);
+  }
+
+  // Scrolls the focused job's card into view once it's on the shown page.
   useEffect(() => {
     if (!focusJobId) return;
     const el = document.getElementById(`job-${focusJobId}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusJobId, filteredJobs, page]);
+  }, [focusJobId, jobs]);
 
-  function handleExport() {
-    const rows = filteredJobs.map(formatForExport);
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Jobs");
-    const stamp = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(workbook, `jobs-export-${stamp}.xlsx`);
-    showToast(`Exported ${rows.length} job${rows.length === 1 ? "" : "s"}`, "success");
+  async function handleExport() {
+    try {
+      const data = await getJobsAll(filterParams());
+      const rows = data.items.map(formatForExport);
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Jobs");
+      const stamp = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `jobs-export-${stamp}.xlsx`);
+      showToast(`Exported ${rows.length} job${rows.length === 1 ? "" : "s"}`, "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
   }
 
   return (
@@ -416,9 +416,9 @@ export default function Jobs() {
         </label>
         <div className="filter-bar-actions">
           <span className="muted small">
-            {filteredJobs.length} of {jobs.length} job{jobs.length === 1 ? "" : "s"}
+            {total} job{total === 1 ? "" : "s"}
           </span>
-          <button className="btn btn-secondary" onClick={handleExport} disabled={filteredJobs.length === 0}>
+          <button className="btn btn-secondary" onClick={handleExport} disabled={total === 0}>
             Export as Excel
           </button>
         </div>
@@ -428,23 +428,23 @@ export default function Jobs() {
         <p>Loading jobs...</p>
       ) : (
         <>
-          <JobsChart jobs={filteredJobs} />
+          {overviewJobs && <JobsChart jobs={overviewJobs} />}
 
-          {filteredJobs.length === 0 ? (
+          {total === 0 ? (
             <p className="empty-state">
-              {jobs.length === 0
+              {!hasAnyJobs
                 ? "No jobs yet - paste a link on the Home tab to get started."
                 : "No jobs match the current filters."}
             </p>
           ) : (
             <>
-              <Pagination total={totalJobs} page={page} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} noun="job" />
+              <Pagination total={total} page={page} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} noun="job" />
               <div className="job-list">
-                {pageJobs.map((job) => (
+                {jobs.map((job) => (
                   <JobCard key={job._id} job={job} onChange={loadAll} highlighted={job._id === focusJobId} />
                 ))}
               </div>
-              <Pagination total={totalJobs} page={page} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} noun="job" />
+              <Pagination total={total} page={page} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} noun="job" />
             </>
           )}
         </>

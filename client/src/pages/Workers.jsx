@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import WorkerForm from "../components/WorkerForm.jsx";
 import WorkerTable from "../components/WorkerTable.jsx";
-import Pagination, { usePagination } from "../components/Pagination.jsx";
+import Pagination from "../components/Pagination.jsx";
 import {
-  getWorkers,
+  getWorkersPage,
   createWorker,
   updateWorker,
   deleteWorker,
@@ -60,25 +60,66 @@ export default function Workers() {
   const [rollingOut, setRollingOut] = useState(false);
   const [rollOutResult, setRollOutResult] = useState(null);
 
-  // Same fix as Jobs.jsx's loadAll() - see the comment there. Without
-  // hasLoadedOnce, editing/adding/deleting a worker while scrolled down
-  // the list would flip `loading` back to true, unmount the whole
-  // WorkerTable to show "Loading workers..." again, then remount it -
-  // which resets scroll to the top of the page every time.
+  // One page of (server-filtered) workers at a time - see GET /api/workers.
+  // Same approach as Jobs.jsx (see its comments): `loading` gates only the
+  // very first render, later fetches swap data in without unmounting the
+  // table (which would reset the scroll position), the page number belongs
+  // to one filter combination, and a focused worker's page is looked up by
+  // the server.
   const hasLoadedOnce = useRef(false);
+  const latestRequest = useRef(0);
+  const skipSig = useRef("");
+  const focusPending = useRef(Boolean(focusWorkerId));
+  const lastFocus = useRef(focusWorkerId);
+  if (lastFocus.current !== focusWorkerId) {
+    lastFocus.current = focusWorkerId;
+    focusPending.current = Boolean(focusWorkerId);
+  }
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const filterKey = [workAreaFilter, pageSize].join("|");
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 });
+  const page = pageState.key === filterKey ? pageState.page : 1;
+  function setPage(p) {
+    setPageState({ key: filterKey, page: p });
+  }
 
-  async function load() {
+  // Re-fetches the current page (after adding/editing/deleting a worker).
+  function load() {
+    setRefreshTick((t) => t + 1);
+  }
+
+  useEffect(() => {
+    const params = { workArea: workAreaFilter, pageSize };
+    if (focusWorkerId) params.focus = focusWorkerId;
+    const sigFor = (p) => JSON.stringify([params, p, refreshTick]);
+    const askedPage = focusPending.current ? null : page;
+    if (askedPage !== null && skipSig.current === sigFor(askedPage)) return;
+
+    const requestId = ++latestRequest.current;
     if (!hasLoadedOnce.current) setLoading(true);
     setError("");
-    try {
-      setWorkers(await getWorkers());
-      hasLoadedOnce.current = true;
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+    getWorkersPage({ ...params, ...(askedPage !== null ? { page: askedPage } : {}) })
+      .then((data) => {
+        if (requestId !== latestRequest.current) return;
+        setWorkers(data.items);
+        setTotal(data.total);
+        hasLoadedOnce.current = true;
+        focusPending.current = false;
+        if (data.page !== askedPage) {
+          skipSig.current = sigFor(data.page);
+          setPageState({ key: filterKey, page: data.page });
+        }
+      })
+      .catch((err) => {
+        if (requestId === latestRequest.current) setError(err.message);
+      })
+      .finally(() => {
+        if (requestId === latestRequest.current) setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey, page, refreshTick, focusWorkerId]);
 
   async function loadRollout() {
     try {
@@ -91,7 +132,6 @@ export default function Workers() {
   }
 
   useEffect(() => {
-    load();
     loadRollout();
   }, []);
 
@@ -185,23 +225,6 @@ export default function Workers() {
       setRollingOut(false);
     }
   }
-
-  const visibleWorkers = workers.filter((w) =>
-    workAreaFilter === "all" ? true : workAreaFilter === "none" ? !w.workArea : w.workArea === workAreaFilter
-  );
-  const {
-    pageItems: pageWorkers,
-    page,
-    pageSize,
-    setPage,
-    setPageSize,
-    total: totalWorkers,
-  } = usePagination(visibleWorkers, {
-    initialPageSize: 25,
-    resetKey: workAreaFilter,
-    focusKey: focusWorkerId,
-    focusIndex: focusWorkerId ? visibleWorkers.findIndex((w) => w._id === focusWorkerId) : -1,
-  });
 
   return (
     <div className="page">
@@ -364,7 +387,7 @@ export default function Workers() {
       ) : (
         <>
         <WorkerTable
-          workers={pageWorkers}
+          workers={workers}
           onEdit={(w) => {
             setEditing(w);
             setShowForm(true);
@@ -374,7 +397,7 @@ export default function Workers() {
           highlightId={focusWorkerId}
         />
         <Pagination
-          total={totalWorkers}
+          total={total}
           page={page}
           pageSize={pageSize}
           onPage={setPage}

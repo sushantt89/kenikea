@@ -160,4 +160,10 @@ const JobSchema = new Schema(
   { timestamps: true }
 );
 
+// The Jobs list filters/sorts/pages in the database (see routes/jobs.js).
+JobSchema.index({ archived: 1, createdAt: -1 });
+JobSchema.index({ scheduledStart: 1 });
+JobSchema.index({ "assignedWorkers.worker": 1 });
+JobSchema.index({ status: 1 });
+
 export default mongoose.model("Job", JobSchema);
