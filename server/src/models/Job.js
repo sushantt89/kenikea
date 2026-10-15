@@ -139,6 +139,20 @@ const JobSchema = new Schema(
         ],
         default: [],
       },
+      // Red "NOT ACCEPTED" markers left on the calendar when a worker
+      // declines (see services/declineSync.js). Kept apart from `events`
+      // because those get rebuilt on every team/payout change; these stay as
+      // a record until someone is assigned to the job again, or it is deleted.
+      declined: {
+        type: [
+          {
+            eventId: { type: String },
+            htmlLink: { type: String },
+            workerId: { type: Schema.Types.ObjectId, ref: "Worker", default: null },
+          },
+        ],
+        default: [],
+      },
     },
     // Set when the scraper produced a best-guess field so the UI can
     // flag it for the user to double check before saving.

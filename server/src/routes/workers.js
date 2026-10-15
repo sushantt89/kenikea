@@ -341,7 +341,7 @@ router.delete("/:id", async (req, res, next) => {
         }
         job.status = "Unassigned";
         job.assignedAt = null;
-        job.googleCalendar = { events: [] };
+        job.googleCalendar.events = [];
         await job.save();
       } else {
         // Other workers are still on the team - resync the invite(s) so

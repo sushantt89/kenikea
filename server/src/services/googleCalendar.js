@@ -234,10 +234,10 @@ function pushRawSection(lines, title, rawLines) {
  * it doesn't need qualifying). No payoutView at all omits the Pay section
  * entirely.
  */
-function buildDescription(job, team, payoutView) {
+function buildDescription(job, team, payoutView, teamSize = team.length) {
   const lines = [];
 
-  pushRawSection(lines, "Job details", jobDetailLines(job.description, team.length));
+  pushRawSection(lines, "Job details", jobDetailLines(job.description, teamSize));
 
   // Name and phone only - the customer's email is deliberately left out
   // of the calendar invite (workers don't need it, and it's still visible
@@ -255,7 +255,7 @@ function buildDescription(job, team, payoutView) {
 
   // No "Source: <link>" line anymore - that Beehiive URL isn't something a
   // worker needs to see on their calendar invite.
-  pushSection(lines, null, [`Assigned team: ${team.map((w) => w.name).join(", ")}`]);
+  if (team.length > 0) pushSection(lines, null, [`Assigned team: ${team.map((w) => w.name).join(", ")}`]);
 
   return formatDescriptionHtml(lines);
 }
@@ -374,6 +374,65 @@ export async function createAssignmentEvent(job, team, options = {}) {
 }
 
 /**
+ * Leaves a red "NOT ACCEPTED" event on the calendar for a worker who
+ * declined, so the job doesn't just vanish from it. It has no attendees -
+ * nobody is invited or emailed, it only shows on the business calendar - and
+ * is marked "free" so it doesn't block that time. Same time, place and
+ * details as the invite that was declined.
+ * @param {object} job
+ * @param {object} worker - the worker who declined
+ * @param {number} teamSize - how many people were on the job when they declined (the time is split between them)
+ */
+export async function createDeclinedEvent(job, worker, teamSize = 1) {
+  if (!isConfigured()) return { created: false };
+
+  const start = job.scheduledStart ? new Date(job.scheduledStart) : defaultStart();
+  const durationMinutes = job.durationMinutes && job.durationMinutes > 0 ? job.durationMinutes : 60;
+  const end = new Date(start.getTime() + Math.max(1, Math.round(durationMinutes / Math.max(1, teamSize))) * 60000);
+  const timeZone = timezoneForWorkArea(job.workArea || worker.workArea || null);
+
+  const label = formatAssignedTitle(job.title, [], job.customer, undefined, job.packagingRemoval);
+  const note = `<b>NOT ACCEPTED</b> - ${escapeHtml(worker.name)} declined this job.<br><br>`;
+
+  try {
+    const { data } = await getClient().events.insert({
+      calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
+      sendUpdates: "none",
+      requestBody: {
+        summary: `NOT ACCEPTED - ${worker.name} - ${label}`,
+        description: note + buildDescription(job, [], undefined, teamSize),
+        location: cleanAddress(job.location) || undefined,
+        start: { dateTime: start.toISOString(), timeZone },
+        end: { dateTime: end.toISOString(), timeZone },
+        colorId: "11", // Tomato (red)
+        transparency: "transparent",
+      },
+    });
+    return { created: true, eventId: data.id, htmlLink: data.htmlLink };
+  } catch (err) {
+    console.warn("[googleCalendar] failed to create the not-accepted marker:", err.message);
+    return { created: false };
+  }
+}
+
+/**
+ * Deletes a job's "not accepted" markers (see createDeclinedEvent) - called
+ * when the job is reassigned or deleted. Pass worker ids to remove only those
+ * workers' markers. Updates job.googleCalendar.declined; the caller saves.
+ */
+export async function deleteDeclinedEvents(job, onlyWorkerIds = null) {
+  const keep = [];
+  for (const ev of job.googleCalendar?.declined || []) {
+    if (onlyWorkerIds && !onlyWorkerIds.includes(String(ev.workerId))) {
+      keep.push(ev);
+      continue;
+    }
+    if (ev.eventId) await deleteAssignmentEvent(ev.eventId);
+  }
+  if (job.googleCalendar) job.googleCalendar.declined = keep;
+}
+
+/**
  * Fully resyncs a job's Google Calendar invite(s) to match its CURRENT team
  * and payouts: deletes whatever event(s) existed before and creates
  * whatever the current state calls for. Mutates job.googleCalendar and
@@ -394,7 +453,7 @@ export async function syncAssignmentEvents(job, team) {
   for (const ev of job.googleCalendar?.events || []) {
     if (ev.eventId) await deleteAssignmentEvent(ev.eventId);
   }
-  job.googleCalendar = { events: [] };
+  job.googleCalendar.events = [];
 
   const fullTeam = (team || []).filter(Boolean);
   if (fullTeam.length === 0) {

@@ -3,7 +3,7 @@ import Job from "../models/Job.js";
 import Worker from "../models/Worker.js";
 import { scrapeJob, HttpError } from "../services/scraper.js";
 import { rankCandidates, requiredWorkerCount } from "../services/assignment.js";
-import { syncAssignmentEvents, deleteAssignmentEvent } from "../services/googleCalendar.js";
+import { syncAssignmentEvents, deleteAssignmentEvent, deleteDeclinedEvents } from "../services/googleCalendar.js";
 import { fillCoordinatesFromLocation, refreshCoordinatesOnUpdate } from "../services/geocode.js";
 import { computePay } from "../services/pay.js";
 import { WORK_AREAS } from "../utils/workAreas.js";
@@ -234,6 +234,7 @@ router.delete("/:id", async (req, res, next) => {
     for (const ev of job.googleCalendar?.events || []) {
       if (ev.eventId) await deleteAssignmentEvent(ev.eventId);
     }
+    await deleteDeclinedEvents(job);
     await job.deleteOne();
 
     res.json({ ok: true });
@@ -277,6 +278,8 @@ router.post("/:id/assign", async (req, res, next) => {
     for (const pick of picks) {
       job.assignedWorkers.push({ worker: pick.workerId, payout: null });
     }
+    // Someone new has taken the job - the red "not accepted" marker goes.
+    await deleteDeclinedEvents(job);
     job.status = "Assigned";
     job.assignedAt = new Date();
     await job.save();
@@ -309,6 +312,8 @@ router.put("/:id/assign-to/:workerId", async (req, res, next) => {
     const already = job.assignedWorkers.some((a) => String(a.worker) === String(worker._id));
     if (!already) {
       job.assignedWorkers.push({ worker: worker._id, payout: null });
+      // Someone new has taken the job - the red "not accepted" marker goes.
+      await deleteDeclinedEvents(job);
     }
     job.status = "Assigned";
     if (!job.assignedAt) job.assignedAt = new Date();
@@ -387,7 +392,7 @@ router.post("/:id/unassign", async (req, res, next) => {
     job.assignedWorkers = [];
     job.status = "Unassigned";
     job.assignedAt = null;
-    job.googleCalendar = { events: [] };
+    job.googleCalendar.events = [];
     await job.save();
 
     const populated = await job.populate("assignedWorkers.worker", WORKER_POPULATE);

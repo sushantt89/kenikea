@@ -2,7 +2,7 @@ import Job from "../models/Job.js";
 import Worker from "../models/Worker.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
-import { getEventAttendees, syncAssignmentEvents } from "./googleCalendar.js";
+import { getEventAttendees, syncAssignmentEvents, createDeclinedEvent } from "./googleCalendar.js";
 import { sendEmail } from "./mailer.js";
 import { formatAssignedTitle } from "../utils/jobTitle.js";
 
@@ -65,6 +65,17 @@ async function checkOneJob(job) {
 
   const declinedWorkers = declinedAssignments.map((a) => a.worker);
   const declinedIds = new Set(declinedWorkers.map((w) => String(w._id)));
+
+  // Leave a red "NOT ACCEPTED" marker on the calendar for each decline,
+  // using the team size from before they're removed (the job's time is split
+  // between the team).
+  const teamSizeBefore = job.assignedWorkers.length;
+  for (const worker of declinedWorkers) {
+    const marker = await createDeclinedEvent(job, worker, teamSizeBefore);
+    if (marker.created) {
+      job.googleCalendar.declined.push({ eventId: marker.eventId, htmlLink: marker.htmlLink, workerId: worker._id });
+    }
+  }
 
   job.assignedWorkers = job.assignedWorkers.filter(
     (a) => !declinedIds.has(String(a.worker?._id || a.worker))
