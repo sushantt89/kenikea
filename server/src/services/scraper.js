@@ -39,6 +39,7 @@
 import { guessWorkArea, timezoneForWorkArea, DEFAULT_TIMEZONE } from "../utils/workAreas.js";
 import { zonedTimeToUtc, formatInZone } from "../utils/timezone.js";
 import { saveSessionCookies, loadSessionCookieHeader, clearSession } from "./beehiiveSession.js";
+import { cleanAddress } from "../utils/address.js";
 
 const FETCH_TIMEOUT_MS = 15000;
 const BROWSER_NAV_TIMEOUT_MS = 20000;
@@ -569,11 +570,12 @@ function draftFromBeehiiveHtml(html, url) {
   // Australian street-address pattern anywhere on the page, before finally
   // giving up and leaving it blank for the user to fill in by hand (see
   // the extraction.notes flag below).
-  const address =
+  const address = cleanAddress(
     addressFromTag ||
-    guessAddressFromMapsLink(html) ||
-    guessAddressFromAcceptBlock(html, phoneMatch ? html.indexOf(phoneMatch[0]) : -1) ||
-    guessAddressFromText(text);
+      guessAddressFromMapsLink(html) ||
+      guessAddressFromAcceptBlock(html, phoneMatch ? html.indexOf(phoneMatch[0]) : -1) ||
+      guessAddressFromText(text)
+  );
 
   const orderNumberMatch = html.match(/<b>OrderNumber<\/b>\s*([\s\S]*?)<\/p>/i);
   const orderNumber = orderNumberMatch ? stripHtml(orderNumberMatch[1]).trim() : "";
@@ -601,6 +603,23 @@ function draftFromBeehiiveHtml(html, url) {
   // their nested sub-items - see parseProductList().
   const products = parseProductList(html);
   const productCount = countProductLines(products);
+
+  // "Site measure" jobs say so at the top of the job details (above the
+  // item list) - show it at the top of the product list. Only the first
+  // details block, before its list, is checked: later instruction text on
+  // every page mentions other things.
+  const detailsStart = html.search(/class="markdown"/i);
+  const detailsHead =
+    detailsStart >= 0 ? html.slice(detailsStart, detailsStart + 4000).split(/<ul\b/i)[0] : "";
+  if (/site\s*measure/i.test(stripHtml(detailsHead)) && !/^site\s*measure/i.test(products[0] || "")) {
+    products.unshift("Site measure");
+  }
+
+  // Packaging removal shows up as a charge line on the page ("the
+  // instructions" block mentions it on every job, so only the charges
+  // table counts).
+  const chargesTable = html.match(/<table[^>]*charges[^>]*>[\s\S]*?<\/table>/i);
+  const packagingRemoval = hasPackagingRemoval(chargesTable ? stripHtml(chargesTable[0]) : "", products.join(" "));
 
   const isSecureIt = /secure\s*it/i.test(text);
   const isOverdue = /overdue/i.test(text);
@@ -644,11 +663,16 @@ function draftFromBeehiiveHtml(html, url) {
     durationMinutes: allocatedMinutes || 60,
     customer: { name: customerName, phone, email },
     chargesTotal,
+    packagingRemoval,
     extraction: {
       confidence: scheduledStart && address ? "high" : "medium",
       notes: notes.join("; "),
     },
   };
+}
+
+function hasPackagingRemoval(...texts) {
+  return /packag(?:e|ing)\s*removal/i.test(texts.join(" "));
 }
 
 // A generic Australian street-address pattern used as a LAST-RESORT
@@ -846,7 +870,7 @@ function draftFromBeehiiveJob(job, url) {
   // job.location.address is the normal source, but fall back to scanning
   // this job's own description text for a plain address pattern if that
   // structured field is ever missing - see AU_ADDRESS_PATTERN above.
-  const location = job.location?.address || guessAddressFromText(allText) || "";
+  const location = cleanAddress(job.location?.address || guessAddressFromText(allText) || "");
   const customer = job.customer || {};
   // Same ordering reason as draftFromBeehiiveHtml above: guess the work
   // area first so a fallback-parsed time (see below) is interpreted in the
@@ -880,7 +904,6 @@ function draftFromBeehiiveJob(job, url) {
   const descriptionParts = [];
   if (products.length) descriptionParts.push(`Products: ${products.join("; ")}`);
   if (allocatedMinutes) descriptionParts.push(`Estimated duration: ${allocatedMinutes} mins`);
-  if (job.serviceCentre?.distance) descriptionParts.push(`Distance to job: ${job.serviceCentre.distance}`);
   if (customer.name) {
     descriptionParts.push(`Customer: ${customer.name}${customer.phone ? ` (${customer.phone})` : ""}`);
   }
@@ -906,6 +929,7 @@ function draftFromBeehiiveJob(job, url) {
       email: customer.email || "",
     },
     chargesTotal,
+    packagingRemoval: hasPackagingRemoval(JSON.stringify(job.charges || []), products.join(" ")),
     extraction: {
       confidence: scheduledStart && location ? "high" : "medium",
       notes: notes.join("; "),

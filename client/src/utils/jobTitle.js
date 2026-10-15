@@ -59,8 +59,9 @@ export function splitJobTitle(title) {
  * yet.
  * @param {object} [customer] - job.customer ({name, phone, email}) -
  *   only name and phone are ever used here.
+ * @param {boolean} [packagingRemoval] - adds " - PACKAGING REMOVAL" to the end.
  */
-export function formatAssignedTitle(title, workerNames, customer) {
+export function formatAssignedTitle(title, workerNames, customer, packagingRemoval = false) {
   const names = (workerNames || []).filter(Boolean);
   const { jobId } = splitJobTitle(title);
   const customerName = (customer?.name || "").trim();
@@ -71,10 +72,11 @@ export function formatAssignedTitle(title, workerNames, customer) {
       : customerName
     : customerPhone;
 
-  if (!jobId && !customerPart && names.length === 0) return title || "";
+  const suffix = packagingRemoval ? " - PACKAGING REMOVAL" : "";
+  if (!jobId && !customerPart && names.length === 0) return `${title || ""}${suffix}`;
 
   const who = names.length > 0 ? names.join(" + ") : "Unassigned";
   const idPart = jobId ? ` (${jobId})` : "";
   const lead = `${who}${idPart}`;
-  return customerPart ? `${lead} - ${customerPart}` : lead;
+  return `${customerPart ? `${lead} - ${customerPart}` : lead}${suffix}`;
 }

@@ -395,8 +395,10 @@ function sanitizeBody(body) {
     customer,
     extraction,
     chargesTotal,
+    packagingRemoval,
   } = body;
   const out = { title, description, sourceUrl, location, difficulty, priority };
+  if (packagingRemoval !== undefined) out.packagingRemoval = Boolean(packagingRemoval);
   if (lat !== undefined && lat !== "") out.lat = Number(lat);
   if (lng !== undefined && lng !== "") out.lng = Number(lng);
   if (workArea !== undefined) out.workArea = WORK_AREAS.includes(workArea) ? workArea : null;

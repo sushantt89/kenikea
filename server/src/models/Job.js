@@ -83,6 +83,12 @@ const JobSchema = new Schema(
       type: Number,
       default: 60,
     },
+    // True when the job includes packaging removal - "PACKAGING REMOVAL"
+    // is added to the end of its title (job list and calendar invite).
+    packagingRemoval: {
+      type: Boolean,
+      default: false,
+    },
     // Customer details, when the source job includes them (e.g. a
     // homeowner requesting an assembly/repair). Purely informational.
     customer: {

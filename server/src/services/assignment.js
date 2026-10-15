@@ -126,7 +126,10 @@ function getJobWindow(j) {
   const start = new Date(j.scheduledStart).getTime();
   if (Number.isNaN(start)) return null;
   const durationMinutes = j.durationMinutes ?? 60;
-  return { start, end: start + durationMinutes * 60 * 1000 };
+  // A job with several workers shares its time between them, so each
+  // assigned worker is busy for the total divided by the team size.
+  const teamSize = Array.isArray(j.assignedWorkers) ? Math.max(1, j.assignedWorkers.length) : 1;
+  return { start, end: start + (durationMinutes / teamSize) * 60 * 1000 };
 }
 
 /**

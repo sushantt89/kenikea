@@ -13,6 +13,7 @@ import {
   rollOutForm,
 } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
+import { WORK_AREAS } from "../utils/workAreas.js";
 
 // "in 5 days" / "today" / "overdue by 3 days" / null if never rolled out
 // yet - the fortnight is always exactly 14 days from the last roll-out, see
@@ -46,6 +47,7 @@ export default function Workers() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
   const [error, setError] = useState("");
+  const [workAreaFilter, setWorkAreaFilter] = useState("all");
   const [editing, setEditing] = useState(null); // worker being edited, or null for "add"
   const [showForm, setShowForm] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -324,11 +326,28 @@ export default function Workers() {
         </div>
       )}
 
+      <div className="card filter-bar">
+        <label>
+          Work area
+          <select value={workAreaFilter} onChange={(e) => setWorkAreaFilter(e.target.value)}>
+            <option value="all">All work areas</option>
+            <option value="none">No work area set</option>
+            {WORK_AREAS.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       {loading ? (
         <p>Loading workers...</p>
       ) : (
         <WorkerTable
-          workers={workers}
+          workers={workers.filter((w) =>
+            workAreaFilter === "all" ? true : workAreaFilter === "none" ? !w.workArea : w.workArea === workAreaFilter
+          )}
           onEdit={(w) => {
             setEditing(w);
             setShowForm(true);

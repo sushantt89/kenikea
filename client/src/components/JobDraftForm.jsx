@@ -222,6 +222,15 @@ export default function JobDraftForm({ draft, onSave, onDiscard }) {
         </label>
       </div>
 
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          checked={Boolean(form.packagingRemoval)}
+          onChange={(e) => update("packagingRemoval", e.target.checked)}
+        />{" "}
+        Packaging removal
+      </label>
+
       <div className="form-row">
         <label>
           {/* Currency follows the work area picked above - Auckland is

@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { WORK_AREA_COLOR_IDS, timezoneForWorkArea } from "../utils/workAreas.js";
 import { formatAssignedTitle } from "../utils/jobTitle.js";
+import { cleanAddress } from "../utils/address.js";
 
 /**
  * Adds an assignment to the team's Google Calendar. This uses a single
@@ -143,7 +144,7 @@ function formatDescriptionHtml(lines) {
  * charge to the customer. This only affects the calendar - job.description
  * itself is untouched, so the Jobs tab still shows the full scraped detail.
  */
-function jobDetailLines(description) {
+function jobDetailLines(description, teamSize = 1) {
   const lines = [];
   for (const item of descriptionBullets(description)) {
     if (/^Charges total:/i.test(item)) continue;
@@ -151,6 +152,15 @@ function jobDetailLines(description) {
     // not an instruction for the worker - on the invite it just confused
     // people, so it's left off (it stays in job.description in the app).
     if (/^Must commit to attend:/i.test(item)) continue;
+    // Travel info from the source page - the invite is for the address only.
+    if (/^Distance to job:/i.test(item)) continue;
+    // With more than one worker the job's time is shared, so each person's
+    // time is the total divided by the team size.
+    const durationMatch = item.match(/^Estimated duration:\s*(\d+)\s*mins?$/i);
+    if (durationMatch && teamSize > 1) {
+      lines.push(`\u2022 Estimated duration: ${Math.round(Number(durationMatch[1]) / teamSize)} mins each`);
+      continue;
+    }
     const productsMatch = item.match(/^Products:\s*(.+)$/i);
     if (productsMatch) {
       // Items exactly as the job page lists them: top-level items as "•"
@@ -227,7 +237,7 @@ function pushRawSection(lines, title, rawLines) {
 function buildDescription(job, team, payoutView) {
   const lines = [];
 
-  pushRawSection(lines, "Job details", jobDetailLines(job.description));
+  pushRawSection(lines, "Job details", jobDetailLines(job.description, team.length));
 
   // Name and phone only - the customer's email is deliberately left out
   // of the calendar invite (workers don't need it, and it's still visible
@@ -286,7 +296,11 @@ export async function createAssignmentEvent(job, team, options = {}) {
   const usedDefaultTime = !job.scheduledStart;
   const start = job.scheduledStart ? new Date(job.scheduledStart) : defaultStart();
   const durationMinutes = job.durationMinutes && job.durationMinutes > 0 ? job.durationMinutes : 60;
-  const end = new Date(start.getTime() + durationMinutes * 60000);
+  // The job's time is shared between everyone on the team (2 workers on a
+  // 2 hour job = 1 hour each), so the event is the total divided by the
+  // team size.
+  const perPersonMinutes = Math.max(1, Math.round(durationMinutes / Math.max(1, fullTeam.length)));
+  const end = new Date(start.getTime() + perPersonMinutes * 60000);
 
   const description = buildDescription(job, fullTeam, options.payoutView);
 
@@ -326,7 +340,8 @@ export async function createAssignmentEvent(job, team, options = {}) {
     job.title,
     invitable.map((w) => w.name),
     job.customer,
-    options.payoutView?.amount
+    options.payoutView?.amount,
+    job.packagingRemoval
   );
 
   try {
@@ -337,7 +352,7 @@ export async function createAssignmentEvent(job, team, options = {}) {
       requestBody: {
         summary,
         description,
-        location: job.location || undefined,
+        location: cleanAddress(job.location) || undefined,
         start: { dateTime: start.toISOString(), timeZone },
         end: { dateTime: end.toISOString(), timeZone },
         attendees: invitable.map((w) => ({ email: w.email, displayName: w.name })),

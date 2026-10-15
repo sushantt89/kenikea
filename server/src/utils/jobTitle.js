@@ -62,8 +62,9 @@ export function splitJobTitle(title) {
  *   ("(698932 · $52)") - used only for calendar invite titles, so a worker
  *   sees what the job pays at a glance. Omitted everywhere else (Jobs list,
  *   notifications), which keeps the plain "(698932)" format.
+ * @param {boolean} [packagingRemoval] - adds " - PACKAGING REMOVAL" to the end.
  */
-export function formatAssignedTitle(title, workerNames, customer, payout) {
+export function formatAssignedTitle(title, workerNames, customer, payout, packagingRemoval = false) {
   const names = (workerNames || []).filter(Boolean);
   const { jobId } = splitJobTitle(title);
   const customerName = (customer?.name || "").trim();
@@ -74,7 +75,8 @@ export function formatAssignedTitle(title, workerNames, customer, payout) {
       : customerName
     : customerPhone;
 
-  if (!jobId && !customerPart && names.length === 0) return title || "";
+  const suffix = packagingRemoval ? " - PACKAGING REMOVAL" : "";
+  if (!jobId && !customerPart && names.length === 0) return `${title || ""}${suffix}`;
 
   const who = names.length > 0 ? names.join(" + ") : "Unassigned";
   const hasPayout = payout != null && Number.isFinite(Number(payout));
@@ -84,5 +86,5 @@ export function formatAssignedTitle(title, workerNames, customer, payout) {
   const idInner = [jobId, payoutText].filter(Boolean).join(" \u00b7 ");
   const idPart = idInner ? ` (${idInner})` : "";
   const lead = `${who}${idPart}`;
-  return customerPart ? `${lead} - ${customerPart}` : lead;
+  return `${customerPart ? `${lead} - ${customerPart}` : lead}${suffix}`;
 }

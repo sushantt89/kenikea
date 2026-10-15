@@ -117,7 +117,7 @@ function ItemText({ text }) {
   );
 }
 
-function JobDescriptionView({ description }) {
+function JobDescriptionView({ description, teamSize = 1 }) {
   const facts = splitDescriptionFacts(description);
   if (facts.length === 0) return null;
 
@@ -165,9 +165,16 @@ function JobDescriptionView({ description }) {
             </div>
           );
         }
+        // With more than one worker the time is shared, so show each
+        // person's share (total divided by the team size).
+        const durationMatch = fact.match(/^Estimated duration:\s*(\d+)\s*mins?$/i);
+        const text =
+          durationMatch && teamSize > 1
+            ? `Estimated duration: ${Math.round(Number(durationMatch[1]) / teamSize)} mins each`
+            : fact;
         return (
           <p key={i} className="job-description-line">
-            {fact}
+            {text}
           </p>
         );
       })}
@@ -494,7 +501,7 @@ export default function JobCard({ job, onChange, highlighted }) {
     <div id={`job-${job._id}`} className={`card job-card${highlighted ? " job-card-highlighted" : ""}`}>
       <div className="job-card-header">
         <div>
-          <h3>{formatAssignedTitle(job.title, assignedWorkers.map((a) => a.worker?.name), job.customer)}</h3>
+          <h3>{formatAssignedTitle(job.title, assignedWorkers.map((a) => a.worker?.name), job.customer, job.packagingRemoval)}</h3>
           <p className="muted small">
             {job.location || "No location"} &middot; difficulty {job.difficulty} &middot; priority {job.priority}
             {job.workArea && (
@@ -511,11 +518,15 @@ export default function JobCard({ job, onChange, highlighted }) {
         </div>
       </div>
 
-      <JobDescriptionView description={job.description} />
+      <JobDescriptionView description={job.description} teamSize={assignedWorkers.length} />
 
       <p className="muted small">
         {formatDateTime(job.scheduledStart, job.workArea)
-          ? `Scheduled: ${formatDateTime(job.scheduledStart, job.workArea)} (${job.durationMinutes || 60} min)`
+          ? `Scheduled: ${formatDateTime(job.scheduledStart, job.workArea)} (${
+              assignedWorkers.length > 1
+                ? `${Math.round((job.durationMinutes || 60) / assignedWorkers.length)} min each`
+                : `${job.durationMinutes || 60} min`
+            })`
           : "No scheduled time set"}
         {job.customer?.name && ` · Customer: ${job.customer.name}${job.customer.phone ? ` (${job.customer.phone})` : ""}`}
       </p>
