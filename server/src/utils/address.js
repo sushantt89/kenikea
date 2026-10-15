@@ -23,7 +23,11 @@ export function cleanAddress(address) {
     out += sep + piece;
   }
 
-  // The first piece itself could be the travel info only if there was no
-  // address at all - leave that case alone.
-  return out.replace(/\s{2,}/g, " ").replace(/[\s,|-]+$/, "").trim();
+  // Travel info glued on with just a space (e.g. "... SA 5082 7.65 km / 14
+  // mins to job site"): cut everything from the distance onwards. An
+  // address never contains a "N km" / "N mins" figure itself.
+  const cut = out.search(TRAVEL_INFO);
+  if (cut > 0) out = out.slice(0, cut);
+
+  return out.replace(/\s{2,}/g, " ").replace(/[\s,|\/-]+$/, "").trim();
 }
