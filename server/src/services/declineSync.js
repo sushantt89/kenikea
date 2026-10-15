@@ -81,7 +81,8 @@ async function checkOneJob(job) {
   const remaining = await Worker.find({ _id: { $in: job.assignedWorkers.map((a) => a.worker) } });
   await syncAssignmentEvents(job, remaining);
 
-  const admins = await User.find({}, "email");
+  // Not the hidden maintenance login (see services/auth.js) - it never gets these emails.
+  const admins = await User.find({ hidden: { $ne: true } }, "email");
   const adminEmails = admins.map((u) => u.email).filter(Boolean);
 
   for (const worker of declinedWorkers) {

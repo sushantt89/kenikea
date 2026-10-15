@@ -76,6 +76,12 @@ export async function sendEmail({ to, subject, body }) {
   if (!to) {
     return { sent: false, reason: "No email address given." };
   }
+  // The hidden extra maintenance login (EXTRA_ADMIN_EMAIL, see services/auth.js)
+  // never gets any email from the app, whatever triggered it.
+  const hiddenAdmin = (process.env.EXTRA_ADMIN_EMAIL || "").toLowerCase().trim();
+  if (hiddenAdmin && String(to).toLowerCase().trim() === hiddenAdmin) {
+    return { sent: false, reason: "Recipient is the hidden maintenance login - never emailed." };
+  }
 
   try {
     const gmail = getClient();

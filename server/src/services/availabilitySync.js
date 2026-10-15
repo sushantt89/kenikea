@@ -349,7 +349,8 @@ async function notifySubmission(name, email) {
     worker: worker ? worker._id : null,
   });
 
-  const admins = await User.find({}, "email");
+  // Not the hidden maintenance login (see services/auth.js) - it never gets these emails.
+  const admins = await User.find({ hidden: { $ne: true } }, "email");
   await Promise.all(
     admins
       .filter((u) => u.email)
