@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import WorkerForm from "../components/WorkerForm.jsx";
 import WorkerTable from "../components/WorkerTable.jsx";
+import Pagination, { usePagination } from "../components/Pagination.jsx";
 import {
   getWorkers,
   createWorker,
@@ -185,6 +186,23 @@ export default function Workers() {
     }
   }
 
+  const visibleWorkers = workers.filter((w) =>
+    workAreaFilter === "all" ? true : workAreaFilter === "none" ? !w.workArea : w.workArea === workAreaFilter
+  );
+  const {
+    pageItems: pageWorkers,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    total: totalWorkers,
+  } = usePagination(visibleWorkers, {
+    initialPageSize: 25,
+    resetKey: workAreaFilter,
+    focusKey: focusWorkerId,
+    focusIndex: focusWorkerId ? visibleWorkers.findIndex((w) => w._id === focusWorkerId) : -1,
+  });
+
   return (
     <div className="page">
       <div className="page-header">
@@ -344,10 +362,9 @@ export default function Workers() {
       {loading ? (
         <p>Loading workers...</p>
       ) : (
+        <>
         <WorkerTable
-          workers={workers.filter((w) =>
-            workAreaFilter === "all" ? true : workAreaFilter === "none" ? !w.workArea : w.workArea === workAreaFilter
-          )}
+          workers={pageWorkers}
           onEdit={(w) => {
             setEditing(w);
             setShowForm(true);
@@ -356,6 +373,15 @@ export default function Workers() {
           onAvailabilityChange={load}
           highlightId={focusWorkerId}
         />
+        <Pagination
+          total={totalWorkers}
+          page={page}
+          pageSize={pageSize}
+          onPage={setPage}
+          onPageSize={setPageSize}
+          noun="worker"
+        />
+        </>
       )}
     </div>
   );

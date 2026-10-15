@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import JobCard from "../components/JobCard.jsx";
 import JobsChart from "../components/JobsChart.jsx";
+import Pagination, { usePagination } from "../components/Pagination.jsx";
 import { getJobs, getWorkers } from "../api.js";
 import { useToast } from "../toast/ToastContext.jsx";
 import { WORK_AREAS, timezoneForWorkArea, countryForWorkArea, currencyForWorkArea } from "../utils/workAreas.js";
@@ -280,13 +281,33 @@ export default function Jobs() {
     search,
   ]);
 
+  // Only one page of job cards is rendered at a time (they're heavy) - the
+  // overview above and the Excel export still cover every filtered job.
+  const focusIndex = useMemo(
+    () => (focusJobId ? filteredJobs.findIndex((j) => j._id === focusJobId) : -1),
+    [filteredJobs, focusJobId]
+  );
+  const {
+    pageItems: pageJobs,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    total: totalJobs,
+  } = usePagination(filteredJobs, {
+    initialPageSize: 10,
+    resetKey: [search, period, customStart, customEnd, workerFilter, statusFilter, workAreaFilter, countryFilter, archivedFilter].join("|"),
+    focusKey: focusJobId,
+    focusIndex,
+  });
+
   // Scrolls the focused job's card into view once it's actually in the
-  // (post-filter) list and rendered - see focusJobId above.
+  // (post-filter) list and on the shown page - see focusJobId above.
   useEffect(() => {
     if (!focusJobId) return;
     const el = document.getElementById(`job-${focusJobId}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusJobId, filteredJobs]);
+  }, [focusJobId, filteredJobs, page]);
 
   function handleExport() {
     const rows = filteredJobs.map(formatForExport);
@@ -416,11 +437,15 @@ export default function Jobs() {
                 : "No jobs match the current filters."}
             </p>
           ) : (
-            <div className="job-list">
-              {filteredJobs.map((job) => (
-                <JobCard key={job._id} job={job} onChange={loadAll} highlighted={job._id === focusJobId} />
-              ))}
-            </div>
+            <>
+              <Pagination total={totalJobs} page={page} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} noun="job" />
+              <div className="job-list">
+                {pageJobs.map((job) => (
+                  <JobCard key={job._id} job={job} onChange={loadAll} highlighted={job._id === focusJobId} />
+                ))}
+              </div>
+              <Pagination total={totalJobs} page={page} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} noun="job" />
+            </>
           )}
         </>
       )}

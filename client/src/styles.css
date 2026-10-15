@@ -1614,3 +1614,24 @@ table {
   letter-spacing: 0.03em;
   margin-left: 6px;
 }
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pagination-pages .btn {
+  min-width: 36px;
+  padding: 6px 10px;
+}
