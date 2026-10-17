@@ -27,7 +27,7 @@ const RANGES = {
   location: { min: 0, max: 20 },
   // WEIGHTS.loadFreeBonus (8, no active jobs) is the best case. One active
   // job in a different area is -12 - the realistic worst case for a
-  // worker who still has spare capacity (the usual candidate pool).
+  // worker with a single other job (the usual case).
   // Several active jobs can score lower still; that's rare enough to just
   // clamp to the bottom of the scale (1/10) rather than stretch the range
   // for an edge case.

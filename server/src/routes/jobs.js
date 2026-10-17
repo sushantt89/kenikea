@@ -12,7 +12,6 @@ import { buildJobFilter, JOB_SORT, parsePaging, pageOf, isObjectId } from "../se
 
 const router = Router();
 
-const MAX_CONCURRENT_JOBS = Number(process.env.MAX_CONCURRENT_JOBS || 2);
 const WORKER_POPULATE = "name email location workArea";
 
 // A job counts as "old" once its own date - scheduledStart when it has
@@ -402,7 +401,7 @@ router.post("/:id/unassign", async (req, res, next) => {
   }
 });
 
-// POST /api/jobs/:id/complete - mark done, frees up the worker's capacity
+// POST /api/jobs/:id/complete - mark done
 router.post("/:id/complete", async (req, res, next) => {
   try {
     const job = await Job.findByIdAndUpdate(
@@ -455,7 +454,7 @@ router.post("/:id/unarchive", async (req, res, next) => {
 async function computeRanking(job) {
   const workers = await Worker.find().lean();
   const activeJobs = await Job.find({ status: "Assigned", _id: { $ne: job._id } }).lean();
-  return rankCandidates(job, workers, activeJobs, MAX_CONCURRENT_JOBS);
+  return rankCandidates(job, workers, activeJobs);
 }
 
 /**

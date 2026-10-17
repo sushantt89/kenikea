@@ -79,7 +79,6 @@ Visit `http://localhost:5000/api/health` - you should see `{"ok":true}`.
 | `MONGO_URI`              | MongoDB connection string                                                |
 | `PORT`                   | API port (default 5000)                                                  |
 | `CLIENT_ORIGIN`          | Frontend origin, for CORS (default `http://localhost:5173`)              |
-| `MAX_CONCURRENT_JOBS`    | How many active jobs a worker can hold before they're "at capacity" (default 2) |
 | `AUTH_SECRET`            | **Required.** Signs login sessions - see section 5                       |
 | `ADMIN_EMAIL`            | Email for the auto-created first login (optional - see section 5)        |
 | `ADMIN_PASSWORD`         | Password for the auto-created first login (optional - see section 5)     |
@@ -752,10 +751,8 @@ Implemented in `server/src/services/assignment.js`, applied in this order:
    zero). Since candidates are already narrowed to the job's own work area
    by rule 2, this is really about picking the closest match *within* that
    area.
-5. **Existing assignments.** Workers already at `MAX_CONCURRENT_JOBS` active
-   jobs are set aside unless literally nobody else qualifies (shown with a
-   warning banner in the UI). Among workers with spare capacity, one who's
-   already working a job **in the same area** is only lightly penalised
+5. **Existing assignments.** There's no cap on how many active jobs a worker
+   can hold; instead, one who's already working a job **in the same area** is only lightly penalised
    (efficient - they're already local); one working elsewhere is penalised
    more (conflicts with their current commitment). Being completely free
    right now gives a small bonus.

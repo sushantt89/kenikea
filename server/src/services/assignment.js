@@ -151,27 +151,25 @@ function isOnTeam(worker, job) {
   return (job.assignedWorkers || []).some((a) => String(a.worker) === String(worker._id));
 }
 
-function scoreLoad(worker, job, activeJobsForWorker, maxConcurrentJobs) {
+function scoreLoad(worker, job, activeJobsForWorker) {
   if (activeJobsForWorker.length === 0) {
-    return { score: WEIGHTS.loadFreeBonus, atCapacity: false, sameArea: null, activeCount: 0 };
+    return { score: WEIGHTS.loadFreeBonus, sameArea: null, activeCount: 0 };
   }
 
-  const atCapacity = activeJobsForWorker.length >= maxConcurrentJobs;
   const sameArea = activeJobsForWorker.some((j) => locationsMatch(j.location, job.location));
 
   let score = sameArea ? WEIGHTS.loadSameAreaPenalty : WEIGHTS.loadDifferentAreaPenalty;
   score += (activeJobsForWorker.length - 1) * WEIGHTS.loadExtraJobPenalty;
 
-  return { score, atCapacity, sameArea, activeCount: activeJobsForWorker.length };
+  return { score, sameArea, activeCount: activeJobsForWorker.length };
 }
 
 /**
  * @param {object} job - the job to assign (needs difficulty, location, lat/lng, assignedWorkers)
  * @param {object[]} workers - all workers to consider
  * @param {object[]} activeJobs - all jobs currently with status "Assigned" (any worker), each with assignedWorkers
- * @param {number} maxConcurrentJobs - capacity limit per worker
  */
-export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) {
+export function rankCandidates(job, workers, activeJobs) {
   const excluded = [];
   const available = [];
 
@@ -213,7 +211,7 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
   }
 
   if (available.length === 0) {
-    return { ranking: [], excluded, pool: "none", assigned: null };
+    return { ranking: [], excluded, assigned: null };
   }
 
   const withActiveJobs = available.map((worker) => {
@@ -223,35 +221,10 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
     return { worker, activeJobsForWorker };
   });
 
-  const notAtCapacity = [];
-  const atCapacity = [];
-  for (const entry of withActiveJobs) {
-    const isAtCapacity = entry.activeJobsForWorker.length >= maxConcurrentJobs;
-    (isAtCapacity ? atCapacity : notAtCapacity).push(entry);
-  }
-
-  let pool = notAtCapacity;
-  let poolLabel = "available";
-  if (pool.length === 0) {
-    // Nobody has spare capacity - fall back to everyone rather than refusing
-    // to assign, but flag it clearly. (They stay in `pool` and get scored
-    // normally below, just under the "all workers are at capacity" label.)
-    pool = atCapacity;
-    poolLabel = "all workers are at capacity";
-  } else {
-    for (const entry of atCapacity) {
-      excluded.push({
-        workerId: entry.worker._id,
-        name: entry.worker.name,
-        reason: `At capacity (${entry.activeJobsForWorker.length}/${maxConcurrentJobs} active jobs)`,
-      });
-    }
-  }
-
-  const ranking = pool.map(({ worker, activeJobsForWorker }) => {
+  const ranking = withActiveJobs.map(({ worker, activeJobsForWorker }) => {
     const skill = scoreSkill(worker, job);
     const location = scoreLocation(worker, job);
-    const load = scoreLoad(worker, job, activeJobsForWorker, maxConcurrentJobs);
+    const load = scoreLoad(worker, job, activeJobsForWorker);
     const priorityBonus = WEIGHTS.priorityBonus[worker.priority] ?? 0;
 
     const total = skill.score + location.score + load.score + priorityBonus;
@@ -275,7 +248,6 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
         load: {
           score: round1(load.score),
           activeCount: load.activeCount,
-          atCapacity: load.atCapacity,
           sameAreaAsExisting: load.sameArea,
         },
         priorityBonus: round1(priorityBonus),
@@ -304,7 +276,6 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
   return {
     ranking,
     excluded,
-    pool: poolLabel,
     assigned: ranking[0] || null,
   };
 }

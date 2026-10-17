@@ -35,7 +35,6 @@ import { rankCandidates } from "./services/assignment.js";
 import { createAssignmentEvent } from "./services/googleCalendar.js";
 import { isConfigured as calendarConfigured } from "./services/googleCalendar.js";
 
-const MAX_CONCURRENT_JOBS = Number(process.env.MAX_CONCURRENT_JOBS || 2);
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -242,7 +241,7 @@ async function seed() {
   );
 
   const activeJobs = await Job.find({ status: "Assigned" }).lean();
-  const result = rankCandidates(mockJob, workers, activeJobs, MAX_CONCURRENT_JOBS);
+  const result = rankCandidates(mockJob, workers, activeJobs);
 
   console.log("[seed] ranked candidates:");
   console.table(

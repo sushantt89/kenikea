@@ -684,11 +684,6 @@ export default function JobCard({ job, onChange, highlighted }) {
 
       {ranking && (
         <div className="ranking">
-          {ranking.pool === "all workers are at capacity" && (
-            <div className="banner banner-warning">
-              Every worker is already at their concurrent-job limit - ranking shown anyway as a fallback.
-            </div>
-          )}
           {ranking.ranking.length === 0 ? (
             <p className="muted small">No available workers to rank.</p>
           ) : (
@@ -733,9 +728,7 @@ export default function JobCard({ job, onChange, highlighted }) {
                       raw={r.breakdown.load.score}
                       kind="load"
                       tooltip={`Raw score: ${r.breakdown.load.score}`}
-                      sub={`${r.breakdown.load.activeCount} active job${r.breakdown.load.activeCount === 1 ? "" : "s"}${
-                        r.breakdown.load.atCapacity ? " (at capacity)" : ""
-                      }`}
+                      sub={`${r.breakdown.load.activeCount} active job${r.breakdown.load.activeCount === 1 ? "" : "s"}`}
                     />
                     <ScoreCell
                       raw={r.breakdown.priorityBonus}
