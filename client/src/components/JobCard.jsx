@@ -223,6 +223,8 @@ export default function JobCard({ job, onChange, highlighted }) {
   const [ranking, setRanking] = useState(null);
   const [openCandidate, setOpenCandidate] = useState(null);
   const [rankingError, setRankingError] = useState("");
+  // The "not available" list under the ranking starts collapsed.
+  const [showExcluded, setShowExcluded] = useState(false);
   const [calendarStatus, setCalendarStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [payoutDrafts, setPayoutDrafts] = useState({});
@@ -287,6 +289,7 @@ export default function JobCard({ job, onChange, highlighted }) {
     try {
       const result = await getCandidates(job._id);
       setRanking(result);
+      setShowExcluded(false);
     } catch (err) {
       setRankingError(err.message);
     } finally {
@@ -754,6 +757,30 @@ export default function JobCard({ job, onChange, highlighted }) {
                 ))}
               </tbody>
             </table>
+            </div>
+          )}
+          {ranking.excluded.length > 0 && (
+            <div className="excluded-list">
+              <button
+                type="button"
+                className="excluded-toggle"
+                onClick={() => setShowExcluded((v) => !v)}
+                aria-expanded={showExcluded}
+              >
+                <span className="excluded-toggle-arrow">{showExcluded ? "\u25BE" : "\u25B8"}</span>
+                Not available
+                <span className="excluded-count">{ranking.excluded.length}</span>
+              </button>
+              {showExcluded && (
+                <ul className="excluded-list-items">
+                  {ranking.excluded.map((e) => (
+                    <li key={e.workerId}>
+                      <span className="excluded-list-name">{e.name}</span>
+                      <span className="excluded-list-reason">{e.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>

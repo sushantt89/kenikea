@@ -176,20 +176,14 @@ export function rankCandidates(job, workers, activeJobs, maxConcurrentJobs = 2) 
   const available = [];
 
   for (const worker of workers) {
+    // Only the job's own work area is considered at all - workers from other
+    // areas are neither ranked nor listed as excluded (an Auckland job has
+    // no use for a list of NSW workers and why they can't do it).
+    if (job.workArea && worker.workArea !== job.workArea) continue;
+
     const fortnightCheck = checkFortnightAvailability(worker, job);
     if (!fortnightCheck.ok) {
       excluded.push({ workerId: worker._id, name: worker.name, reason: fortnightCheck.reason });
-      continue;
-    }
-
-    if (job.workArea && worker.workArea !== job.workArea) {
-      excluded.push({
-        workerId: worker._id,
-        name: worker.name,
-        reason: `Different work area (job is in ${job.workArea}, worker is ${
-          worker.workArea ? `in ${worker.workArea}` : "not assigned a work area"
-        })`,
-      });
       continue;
     }
 

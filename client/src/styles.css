@@ -486,8 +486,34 @@ textarea:focus {
   margin-top: 10px;
 }
 
-.excluded-list-title {
+.excluded-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 6px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.excluded-toggle:hover {
+  color: var(--text);
+}
+
+.excluded-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 
 .excluded-list-items {
