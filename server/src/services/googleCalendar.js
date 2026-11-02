@@ -62,6 +62,26 @@ function getClient() {
   return cachedClient;
 }
 
+// Google caps Calendar API calls per minute. When that's hit, the call fails
+// with a 403/429 "quota exceeded" error - retried a few times with a growing
+// pause (it clears within seconds), so an assignment doesn't fail just
+// because the background decline check happened to use up the minute.
+function isRateLimitError(err) {
+  const msg = String(err?.message || "");
+  return err?.code === 429 || /quota|rate limit|ratelimit|too many requests/i.test(msg);
+}
+
+async function withRetry(fn, attempts = 4) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isRateLimitError(err) || i >= attempts - 1) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * 2 ** i + Math.random() * 500));
+    }
+  }
+}
+
 function defaultStart() {
   const d = new Date();
   d.setMinutes(0, 0, 0);
@@ -346,7 +366,7 @@ export async function createAssignmentEvent(job, team, options = {}) {
 
   try {
     const calendar = getClient();
-    const { data } = await calendar.events.insert({
+    const { data } = await withRetry(() => calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
       sendUpdates: "all",
       requestBody: {
@@ -358,7 +378,7 @@ export async function createAssignmentEvent(job, team, options = {}) {
         attendees: invitable.map((w) => ({ email: w.email, displayName: w.name })),
         ...(colorId ? { colorId } : {}),
       },
-    });
+    }));
 
     return {
       created: true,
@@ -395,7 +415,7 @@ export async function createDeclinedEvent(job, worker, teamSize = 1) {
   const note = `<b>NOT ACCEPTED</b> - ${escapeHtml(worker.name)} declined this job.<br><br>`;
 
   try {
-    const { data } = await getClient().events.insert({
+    const { data } = await withRetry(() => getClient().events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
       sendUpdates: "none",
       requestBody: {
@@ -407,7 +427,7 @@ export async function createDeclinedEvent(job, worker, teamSize = 1) {
         colorId: "11", // Tomato (red)
         transparency: "transparent",
       },
-    });
+    }));
     return { created: true, eventId: data.id, htmlLink: data.htmlLink };
   } catch (err) {
     console.warn("[googleCalendar] failed to create the not-accepted marker:", err.message);
@@ -536,11 +556,13 @@ export async function deleteAssignmentEvent(eventId) {
 
   try {
     const calendar = getClient();
-    await calendar.events.delete({
-      calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
-      eventId,
-      sendUpdates: "all",
-    });
+    await withRetry(() =>
+      calendar.events.delete({
+        calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
+        eventId,
+        sendUpdates: "all",
+      })
+    );
     return { deleted: true };
   } catch (err) {
     console.warn("[googleCalendar] failed to delete event:", err.message);
@@ -548,33 +570,62 @@ export async function deleteAssignmentEvent(eventId) {
   }
 }
 
+// After a quota error the decline check sits out for a while instead of
+// piling more calls onto an already-full minute.
+let attendeeReadsPausedUntil = 0;
+
 /**
- * Reads back the CURRENT attendee response statuses for one calendar
- * event - used by services/declineSync.js to notice when an assigned
- * worker has clicked "No" on their invite (Google never pushes that to
- * this app on its own; someone has to go check). Returns [] rather than
- * throwing if the event can't be read (deleted from the calendar by hand,
- * a bad/stale eventId, Calendar not configured, ...) - callers should
- * treat that the same as "nothing to report", not an error.
- * @returns {Promise<{email: string, responseStatus: string}[]>}
+ * Reads back the CURRENT attendee response statuses for many calendar events
+ * with ONE list call (a few if the calendar is huge) instead of one call per
+ * event - used by services/declineSync.js to notice when an assigned worker
+ * has clicked "No" on their invite (Google never pushes that to this app on
+ * its own; someone has to go check). Checking event by event used up
+ * Google's per-minute quota as soon as there were a few dozen assigned jobs.
+ *
+ * Looks at events from the last 3 weeks onward. An event that's missing from
+ * the result (older, or deleted by hand) simply has no attendees to report.
+ * Returns null when nothing could be read (not configured, paused after a
+ * quota error, or any other failure) - callers should skip the check then,
+ * not treat it as "nobody declined".
+ * @param {string[]} eventIds
+ * @returns {Promise<Map<string, {email: string, responseStatus: string}[]> | null>}
  *   responseStatus is one of Google's own values: "needsAction",
  *   "declined", "tentative", "accepted".
  */
-export async function getEventAttendees(eventId) {
-  if (!isConfigured() || !eventId) return [];
+export async function getAttendeesForEvents(eventIds) {
+  if (!isConfigured() || !eventIds?.length) return null;
+  if (Date.now() < attendeeReadsPausedUntil) return null;
 
+  const wanted = new Set(eventIds);
+  const found = new Map();
   try {
     const calendar = getClient();
-    const { data } = await calendar.events.get({
-      calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
-      eventId,
-    });
-    return (data.attendees || [])
-      .filter((a) => a.email)
-      .map((a) => ({ email: a.email, responseStatus: a.responseStatus }));
+    const timeMin = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString();
+    let pageToken;
+    do {
+      const { data } = await calendar.events.list({
+        calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
+        timeMin,
+        maxResults: 2500,
+        showDeleted: false,
+        singleEvents: false,
+        pageToken,
+        fields: "nextPageToken,items(id,attendees(email,responseStatus))",
+      });
+      for (const item of data.items || []) {
+        if (!wanted.has(item.id)) continue;
+        found.set(
+          item.id,
+          (item.attendees || []).filter((a) => a.email).map((a) => ({ email: a.email, responseStatus: a.responseStatus }))
+        );
+      }
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    return found;
   } catch (err) {
+    if (isRateLimitError(err)) attendeeReadsPausedUntil = Date.now() + 2 * 60 * 1000;
     console.warn("[googleCalendar] failed to read event attendees:", err.message);
-    return [];
+    return null;
   }
 }
 

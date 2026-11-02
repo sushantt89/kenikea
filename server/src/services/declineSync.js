@@ -2,7 +2,7 @@ import Job from "../models/Job.js";
 import Worker from "../models/Worker.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
-import { getEventAttendees, syncAssignmentEvents, createDeclinedEvent } from "./googleCalendar.js";
+import { getAttendeesForEvents, syncAssignmentEvents, createDeclinedEvent } from "./googleCalendar.js";
 import { sendEmail } from "./mailer.js";
 import { formatAssignedTitle } from "../utils/jobTitle.js";
 
@@ -41,17 +41,23 @@ export async function checkCalendarDeclines() {
     "googleCalendar.events.0": { $exists: true },
   }).populate("assignedWorkers.worker", WORKER_POPULATE);
 
+  // One Calendar read for every job's events together (not one per event) -
+  // see getAttendeesForEvents(). null = couldn't read, so skip this round.
+  const eventIds = jobs.flatMap((job) => (job.googleCalendar?.events || []).map((ev) => ev.eventId).filter(Boolean));
+  const attendeesByEvent = await getAttendeesForEvents(eventIds);
+  if (!attendeesByEvent) return;
+
   for (const job of jobs) {
-    await checkOneJob(job);
+    await checkOneJob(job, attendeesByEvent);
   }
 }
 
-async function checkOneJob(job) {
+async function checkOneJob(job, attendeesByEvent) {
   const declinedEmails = new Set();
 
   for (const ev of job.googleCalendar?.events || []) {
     if (!ev.eventId) continue;
-    const attendees = await getEventAttendees(ev.eventId);
+    const attendees = attendeesByEvent.get(ev.eventId) || [];
     for (const a of attendees) {
       if (a.responseStatus === "declined") declinedEmails.add(a.email.toLowerCase());
     }

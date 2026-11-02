@@ -64,7 +64,7 @@ async function maybeArchiveStaleJobs() {
 }
 
 function checkDeclinesInBackground() {
-  if (declineCheckRunning || Date.now() - lastDeclineRun < 20 * 1000) return;
+  if (declineCheckRunning || Date.now() - lastDeclineRun < 60 * 1000) return;
   declineCheckRunning = true;
   lastDeclineRun = Date.now();
   checkCalendarDeclines()
