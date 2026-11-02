@@ -62,6 +62,36 @@ function getClient() {
   return cachedClient;
 }
 
+// Counts every Calendar API call (by kind) so the server log can show what
+// is using Google's per-minute allowance. A summary of the last 60 seconds is
+// logged whenever Google reports a quota/rate-limit error, and as a heads-up
+// when the app itself passes 150 calls in a minute (at most once a minute).
+const recentCalls = [];
+let lastBusyWarning = 0;
+
+function callSummary() {
+  const cutoff = Date.now() - 60 * 1000;
+  while (recentCalls.length && recentCalls[0].at < cutoff) recentCalls.shift();
+  const byKind = {};
+  for (const c of recentCalls) byKind[c.kind] = (byKind[c.kind] || 0) + 1;
+  return { total: recentCalls.length, ...byKind };
+}
+
+function recordCall(kind) {
+  recentCalls.push({ at: Date.now(), kind });
+  const summary = callSummary();
+  if (summary.total > 150 && Date.now() - lastBusyWarning > 60 * 1000) {
+    lastBusyWarning = Date.now();
+    console.warn("[googleCalendar] busy - Calendar API calls in the last 60s:", JSON.stringify(summary));
+  }
+}
+
+function logQuotaHit(kind, err) {
+  console.warn(
+    `[googleCalendar] quota/rate limit on ${kind}: ${err.message} - calls in the last 60s: ${JSON.stringify(callSummary())}`
+  );
+}
+
 // Google caps Calendar API calls per minute. When that's hit, the call fails
 // with a 403/429 "quota exceeded" error - retried a few times with a growing
 // pause (it clears within seconds), so an assignment doesn't fail just
@@ -76,6 +106,7 @@ async function withRetry(fn, attempts = 4) {
     try {
       return await fn();
     } catch (err) {
+      if (isRateLimitError(err)) logQuotaHit("a call (attempt " + (i + 1) + ")", err);
       if (!isRateLimitError(err) || i >= attempts - 1) throw err;
       await new Promise((resolve) => setTimeout(resolve, 1500 * 2 ** i + Math.random() * 500));
     }
@@ -366,7 +397,7 @@ export async function createAssignmentEvent(job, team, options = {}) {
 
   try {
     const calendar = getClient();
-    const { data } = await withRetry(() => calendar.events.insert({
+    const { data } = await withRetry(() => (recordCall("insert"), calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
       sendUpdates: "all",
       requestBody: {
@@ -378,7 +409,7 @@ export async function createAssignmentEvent(job, team, options = {}) {
         attendees: invitable.map((w) => ({ email: w.email, displayName: w.name })),
         ...(colorId ? { colorId } : {}),
       },
-    }));
+    })));
 
     return {
       created: true,
@@ -415,7 +446,7 @@ export async function createDeclinedEvent(job, worker, teamSize = 1) {
   const note = `<b>NOT ACCEPTED</b> - ${escapeHtml(worker.name)} declined this job.<br><br>`;
 
   try {
-    const { data } = await withRetry(() => getClient().events.insert({
+    const { data } = await withRetry(() => (recordCall("insert"), getClient().events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
       sendUpdates: "none",
       requestBody: {
@@ -427,7 +458,7 @@ export async function createDeclinedEvent(job, worker, teamSize = 1) {
         colorId: "11", // Tomato (red)
         transparency: "transparent",
       },
-    }));
+    })));
     return { created: true, eventId: data.id, htmlLink: data.htmlLink };
   } catch (err) {
     console.warn("[googleCalendar] failed to create the not-accepted marker:", err.message);
@@ -556,13 +587,14 @@ export async function deleteAssignmentEvent(eventId) {
 
   try {
     const calendar = getClient();
-    await withRetry(() =>
-      calendar.events.delete({
+    await withRetry(() => {
+      recordCall("delete");
+      return calendar.events.delete({
         calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
         eventId,
         sendUpdates: "all",
-      })
-    );
+      });
+    });
     return { deleted: true };
   } catch (err) {
     console.warn("[googleCalendar] failed to delete event:", err.message);
@@ -603,6 +635,7 @@ export async function getAttendeesForEvents(eventIds) {
     const timeMin = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString();
     let pageToken;
     do {
+      recordCall("list");
       const { data } = await calendar.events.list({
         calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
         timeMin,
@@ -623,7 +656,10 @@ export async function getAttendeesForEvents(eventIds) {
     } while (pageToken);
     return found;
   } catch (err) {
-    if (isRateLimitError(err)) attendeeReadsPausedUntil = Date.now() + 2 * 60 * 1000;
+    if (isRateLimitError(err)) {
+      attendeeReadsPausedUntil = Date.now() + 2 * 60 * 1000;
+      logQuotaHit("the attendee list read", err);
+    }
     console.warn("[googleCalendar] failed to read event attendees:", err.message);
     return null;
   }
