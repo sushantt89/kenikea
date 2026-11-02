@@ -353,6 +353,26 @@ router.put("/:id/payout/:workerId", async (req, res, next) => {
   }
 });
 
+// POST /api/jobs/:id/resend-invites - try creating the job's calendar
+// invite(s) again, e.g. after Google refused them (quota exceeded). Changes
+// nothing about the team or payouts.
+router.post("/:id/resend-invites", async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) return res.status(404).json({ error: "Job not found" });
+    if (job.assignedWorkers.length === 0) {
+      return res.status(409).json({ error: "No workers are assigned to this job yet." });
+    }
+
+    const calendarEvent = await regenerateCalendarEvent(job);
+
+    const populated = await job.populate("assignedWorkers.worker", WORKER_POPULATE);
+    res.json({ job: populated, calendarEvent });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/jobs/:id/unassign-worker/:workerId - remove ONE worker from the
 // job's team, keeping the rest (see POST /:id/unassign below to clear the
 // whole team at once).

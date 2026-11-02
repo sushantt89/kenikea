@@ -130,6 +130,7 @@ export const setWorkerPayout = (id, workerId, payout) =>
   request(`/jobs/${id}/payout/${workerId}`, { method: "PUT", body: JSON.stringify({ payout }) });
 export const unassignWorkerFromJob = (id, workerId) =>
   request(`/jobs/${id}/unassign-worker/${workerId}`, { method: "POST" });
+export const resendCalendarInvites = (id) => request(`/jobs/${id}/resend-invites`, { method: "POST" });
 export const unassignJob = (id) => request(`/jobs/${id}/unassign`, { method: "POST" });
 export const completeJob = (id) => request(`/jobs/${id}/complete`, { method: "POST" });
 export const archiveJob = (id) => request(`/jobs/${id}/archive`, { method: "POST" });

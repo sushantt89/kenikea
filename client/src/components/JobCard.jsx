@@ -5,6 +5,7 @@ import {
   assignJobTo,
   setWorkerPayout,
   unassignWorkerFromJob,
+  resendCalendarInvites,
   unassignJob,
   completeJob,
   deleteJob,
@@ -326,6 +327,21 @@ export default function JobCard({ job, onChange, highlighted }) {
     }
   }
 
+  // "Retry" on the not-added-to-Google-Calendar message.
+  async function handleRetryInvites() {
+    setBusy(true);
+    try {
+      const result = await resendCalendarInvites(job._id);
+      setCalendarStatus(result.calendarEvent);
+      if (result.calendarEvent?.created) showToast("Calendar invite sent", "success");
+      onChange();
+    } catch (err) {
+      setCalendarStatus({ created: false, reason: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleAssignTo(workerId) {
     const workerName = ranking?.ranking.find((r) => r.workerId === workerId)?.name || "Worker";
     setBusy(true);
@@ -637,6 +653,11 @@ export default function JobCard({ job, onChange, highlighted }) {
               ? `Sent ${calendarStatus.count} personal calendar invite${calendarStatus.count === 1 ? "" : "s"} (payouts differ, so each worker only sees their own pay)${calendarStatus.reason ? ` - ${calendarStatus.reason}` : ""}.`
               : `Added to Google Calendar${calendarStatus.usedDefaultTime ? " (no scheduled time was set, so a default 1-hour slot starting next hour was used)" : ""}.`
             : `Not added to Google Calendar: ${calendarStatus.reason}`}
+          {!calendarStatus.created && !/Waiting for a payout|No workers are assigned/.test(calendarStatus.reason || "") && (
+            <button className="btn btn-small" onClick={handleRetryInvites} disabled={busy} style={{ marginLeft: 8 }}>
+              Retry
+            </button>
+          )}
         </div>
       )}
 
