@@ -91,28 +91,28 @@ function formatForExport(job) {
   // Pulled back out of the stored title - see utils/jobTitle.js. Blank for
   // a manually-created job that was never scraped from a Beehiive link.
   const { jobId } = splitJobTitle(job.title);
+  // Column order is the order of these keys: the main columns first, then
+  // everything else.
   return {
-    "Scheduled start": job.scheduledStart
-      ? formatInZone(job.scheduledStart, timezoneForWorkArea(job.workArea))
-      : "",
+    Date: job.scheduledStart ? formatInZone(job.scheduledStart, timezoneForWorkArea(job.workArea)) : "",
+    "Customer name": job.customer?.name || "",
     "Job ID": jobId || "",
-    Status: job.status,
-    "Assigned worker(s)": assignedWorkers.map((a) => a.worker?.name).filter(Boolean).join(", "),
-    "Work area": job.workArea || "",
+    "Worker name": assignedWorkers.map((a) => a.worker?.name).filter(Boolean).join(", "),
+    "IKEA payout ($)": job.chargesTotal ?? "",
+    "Worker payout ($)": assignedWorkers.length ? totalPayout : "",
+    "Proposed worker payout ($)": adminPay ?? "",
+    "Profit ($)": job.chargesTotal != null && effectivePayout != null ? job.chargesTotal - effectivePayout : "",
     // The job's own currency (AUD for every Australian area, NZD for
     // Auckland - see utils/workAreas.js) - included so the money columns
-    // below aren't ambiguous once an export mixes jobs from both
-    // countries; every number in a given row is in THIS currency.
+    // aren't ambiguous once an export mixes jobs from both countries; every
+    // number in a given row is in THIS currency.
     Currency: currencyForWorkArea(job.workArea),
+    Status: job.status,
+    "Work area": job.workArea || "",
     Location: job.location || "",
     Priority: job.priority,
     Difficulty: job.difficulty,
     "Duration (min)": job.durationMinutes ?? "",
-    "IKEA payout ($)": job.chargesTotal ?? "",
-    "Proposed worker payout ($)": adminPay ?? "",
-    "Worker payout total ($)": assignedWorkers.length ? totalPayout : "",
-    "Profit ($)": job.chargesTotal != null && effectivePayout != null ? job.chargesTotal - effectivePayout : "",
-    "Customer name": job.customer?.name || "",
     "Customer phone": job.customer?.phone || "",
     "Customer email": job.customer?.email || "",
   };
