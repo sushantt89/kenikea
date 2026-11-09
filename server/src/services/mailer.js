@@ -83,15 +83,22 @@ export async function sendEmail({ to, subject, body }) {
     return { sent: false, reason: "Recipient is the hidden maintenance login - never emailed." };
   }
 
-  try {
-    const gmail = getClient();
-    await gmail.users.messages.send({
-      userId: "me",
-      requestBody: { raw: buildRawMessage({ to, subject, body }) },
-    });
-    return { sent: true };
-  } catch (err) {
-    return { sent: false, reason: err.message };
+  // Gmail sometimes answers "Too many concurrent requests" / a rate limit
+  // when several emails go out close together - wait a moment and try again
+  // (up to 4 attempts) rather than losing the email.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const gmail = getClient();
+      await gmail.users.messages.send({
+        userId: "me",
+        requestBody: { raw: buildRawMessage({ to, subject, body }) },
+      });
+      return { sent: true };
+    } catch (err) {
+      const busy = err?.code === 429 || /too many|rate limit|ratelimit|quota|try again/i.test(String(err?.message || ""));
+      if (!busy || attempt >= 4) return { sent: false, reason: err.message };
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt + Math.random() * 500));
+    }
   }
 }
 

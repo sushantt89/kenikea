@@ -217,13 +217,17 @@ router.post("/roll-out", async (req, res, next) => {
         "Thanks!",
       ].join("\n");
 
-    const results = await Promise.all(
-      workers.map(async (worker) => ({
+    // One at a time: Gmail refuses a burst of simultaneous sends from one
+    // account ("Too many concurrent requests for user"), which is what made
+    // some of these fail when they all went out together.
+    const results = [];
+    for (const worker of workers) {
+      results.push({
         worker: worker.name,
         email: worker.email,
         ...(await sendEmail({ to: worker.email, subject, body: bodyFor(worker) })),
-      }))
-    );
+      });
+    }
 
     rollout.lastRolledOutAt = new Date();
     await rollout.save();
